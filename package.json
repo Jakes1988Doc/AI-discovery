@@ -1,0 +1,17 @@
+{
+  "name": "discovery-agent-backend",
+  "version": "1.0.0",
+  "description": "Backend for the business discovery voice agent — Claude proxy + Google Sheets writer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "googleapis": "^144.0.0"
+  }
+}

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Business Discovery Call</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --panel: #131826;
+    --panel-2: #1a2030;
+    --text: #e8ecf3;
+    --text-dim: #8a93a8;
+    --text-faint: #5a6275;
+    --border: #232938;
+    --accent: #4a8cff;
+    --accent-hover: #5a9cff;
+    --live: #e24b4a;
+    --speaking: #4a8cff;
+    --thinking: #e89f3c;
+    --ok: #2dba87;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+  }
+  header { margin-bottom: 2rem; }
+  h1 {
+    margin: 0 0 0.5rem;
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1.25rem;
+  }
+  .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--text-faint);
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .dot.live { background: var(--live); animation: pulse 1.4s ease-in-out infinite; }
+  .dot.speaking { background: var(--speaking); animation: pulse 1s ease-in-out infinite; }
+  .dot.thinking { background: var(--thinking); animation: pulse 0.8s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .status-text { font-size: 0.95rem; color: var(--text-dim); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+  }
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin: 0 0 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .stat-val { margin: 0; font-size: 1.35rem; font-weight: 500; }
+
+  .current-q {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .current-q-label {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  .current-q-label span:first-child {
+    font-size: 0.75rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .topic-pill {
+    background: rgba(74, 140, 255, 0.15);
+    color: #8ab4ff;
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+  .current-q-text { margin: 0; font-size: 1.05rem; line-height: 1.55; }
+
+  .controls {
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 0.7rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, transform 0.05s;
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--panel-2);
+    color: var(--text-faint);
+  }
+  button.secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  button.secondary:hover:not(:disabled) { background: var(--panel); }
+
+  .input-row {
+    display: flex; gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  input[type="text"] {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  input[type="text"]:disabled { opacity: 0.5; }
+
+  .transcript {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    max-height: 360px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+  }
+  .transcript-empty {
+    color: var(--text-faint);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 2rem 0;
+    margin: 0;
+  }
+  .turn {
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .turn:last-child { border-bottom: none; }
+  .turn-meta {
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .turn-agent .turn-meta { color: #8ab4ff; }
+  .turn-user .turn-meta { color: #6dd9b1; }
+  .turn-text { margin: 0; font-size: 0.95rem; }
+
+  .warn {
+    background: rgba(232, 159, 60, 0.12);
+    border: 1px solid rgba(232, 159, 60, 0.3);
+    color: #f0b864;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+  }
+  .warn:empty { display: none; }
+
+  .ok-msg {
+    background: rgba(45, 186, 135, 0.12);
+    border: 1px solid rgba(45, 186, 135, 0.3);
+    color: #6dd9b1;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+  }
+  .ok-msg:empty { display: none; }
+
+  .help {
+    color: var(--text-faint);
+    font-size: 0.82rem;
+    margin: 1rem 0 0;
+    line-height: 1.5;
+  }
+
+  .name-prompt {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .name-prompt label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+  }
+  .name-prompt input { margin-bottom: 0.75rem; }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: 1fr 1fr; }
+    .container { padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.35rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Business Discovery Call</h1>
+    <p class="subtitle">A short conversation about your business, your systems, and where automation could help. We'll just listen — no recommendations today.</p>
+  </header>
+
+  <div id="warn" class="warn"></div>
+  <div id="ok-msg" class="ok-msg"></div>
+
+  <div id="name-section" class="name-prompt">
+    <label for="client-name">Your name</label>
+    <input type="text" id="client-name" placeholder="e.g. Sarah Smith" />
+    <label for="business-name">Business name</label>
+    <input type="text" id="business-name" placeholder="e.g. Acme Bookkeeping" />
+  </div>
+
+  <div class="status-row">
+    <div id="dot" class="dot"></div>
+    <span id="status" class="status-text">Enter your details and press start when ready.</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <p class="stat-label">Questions asked</p>
+      <p class="stat-val" id="q-count">0</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Topics covered</p>
+      <p class="stat-val" id="topic-count">0 / 7</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Duration</p>
+      <p class="stat-val" id="duration">0:00</p>
+    </div>
+  </div>
+
+  <div class="current-q">
+    <div class="current-q-label">
+      <span>Current question</span>
+      <span class="topic-pill" id="topic-pill">Intro</span>
+    </div>
+    <p class="current-q-text" id="current-q-text">When you press start, the agent will ask its first question and listen for your reply.</p>
+  </div>
+
+  <div class="controls">
+    <button id="start-btn">Start call</button>
+    <button id="stop-btn" class="secondary" disabled>End call</button>
+  </div>
+
+  <div class="input-row">
+    <input type="text" id="text-input" placeholder="Or type your answer here if mic isn't working" disabled />
+    <button id="send-text-btn" disabled>Send</button>
+  </div>
+
+  <div id="transcript" class="transcript">
+    <p class="transcript-empty">The conversation transcript will appear here as you talk.</p>
+  </div>
+
+  <div class="controls">
+    <button id="export-btn" class="secondary" disabled>Download transcript</button>
+    <button id="reset-btn" class="secondary">Reset</button>
+  </div>
+
+  <p class="help">Speak naturally and pause when you've finished a thought — the agent will detect the silence and respond. For best results use Chrome or Edge. Microphone permission is required.</p>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
