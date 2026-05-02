@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Business Discovery Call</title>
+<title>Your Discovery Call — AI Discovery</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -29,6 +29,40 @@
     line-height: 1.5;
     min-height: 100vh;
   }
+  .top-bar {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.5rem;
+  }
+  .top-bar-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .logo {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .logo-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .back-link {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  .back-link:hover { color: var(--text); }
+
   .container {
     max-width: 760px;
     margin: 0 auto;
@@ -78,7 +112,7 @@
     padding: 0.85rem 1rem;
   }
   .stat-label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--text-dim);
     margin: 0 0 0.25rem;
     text-transform: uppercase;
@@ -98,7 +132,7 @@
     margin-bottom: 0.5rem;
   }
   .current-q-label span:first-child {
-    font-size: 0.75rem; color: var(--text-dim);
+    font-size: 0.72rem; color: var(--text-dim);
     text-transform: uppercase; letter-spacing: 0.04em;
   }
   .topic-pill {
@@ -146,7 +180,7 @@
     display: flex; gap: 0.5rem;
     margin-bottom: 1rem;
   }
-  input[type="text"] {
+  input[type="text"], input[type="email"] {
     flex: 1;
     background: var(--panel);
     border: 1px solid var(--border);
@@ -155,12 +189,13 @@
     border-radius: 8px;
     font-size: 0.95rem;
     font-family: inherit;
+    width: 100%;
   }
-  input[type="text"]:focus {
+  input[type="text"]:focus, input[type="email"]:focus {
     outline: none;
     border-color: var(--accent);
   }
-  input[type="text"]:disabled { opacity: 0.5; }
+  input:disabled { opacity: 0.5; }
 
   .transcript {
     background: var(--panel);
@@ -178,10 +213,7 @@
     padding: 2rem 0;
     margin: 0;
   }
-  .turn {
-    padding: 0.6rem 0;
-    border-bottom: 1px solid var(--border);
-  }
+  .turn { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
   .turn:last-child { border-bottom: none; }
   .turn-meta {
     font-size: 0.7rem;
@@ -204,7 +236,6 @@
     margin-bottom: 1rem;
   }
   .warn:empty { display: none; }
-
   .ok-msg {
     background: rgba(45, 186, 135, 0.12);
     border: 1px solid rgba(45, 186, 135, 0.3);
@@ -236,7 +267,8 @@
     color: var(--text-dim);
     margin-bottom: 0.5rem;
   }
-  .name-prompt input { margin-bottom: 0.75rem; }
+  .name-prompt input { margin-bottom: 1rem; }
+  .name-prompt input:last-child { margin-bottom: 0; }
 
   @media (max-width: 600px) {
     .stats { grid-template-columns: 1fr 1fr; }
@@ -246,10 +278,21 @@
 </style>
 </head>
 <body>
+
+<div class="top-bar">
+  <div class="top-bar-inner">
+    <a href="../" class="logo">
+      <span class="logo-dot"></span>
+      <span>AI Discovery</span>
+    </a>
+    <a href="../" class="back-link">← Back to home</a>
+  </div>
+</div>
+
 <div class="container">
   <header>
-    <h1>Business Discovery Call</h1>
-    <p class="subtitle">A short conversation about your business, your systems, and where automation could help. We'll just listen — no recommendations today.</p>
+    <h1>Your Discovery Call</h1>
+    <p class="subtitle">A short conversation about your business, your systems, and where automation could help. We'll just listen — no recommendations today. A written summary will be saved and emailed to you afterwards.</p>
   </header>
 
   <div id="warn" class="warn"></div>
@@ -260,6 +303,8 @@
     <input type="text" id="client-name" placeholder="e.g. Sarah Smith" />
     <label for="business-name">Business name</label>
     <input type="text" id="business-name" placeholder="e.g. Acme Bookkeeping" />
+    <label for="email">Your email <span style="color: var(--text-faint); font-weight: normal;">(so we can send your summary)</span></label>
+    <input type="email" id="email" placeholder="you@yourbusiness.com" />
   </div>
 
   <div class="status-row">
