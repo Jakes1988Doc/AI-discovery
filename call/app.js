@@ -1,8 +1,7 @@
 // =============================================================
-//  Business Discovery Voice Agent — Frontend
+//  Business Discovery Voice Agent — Frontend (v2)
 // =============================================================
-//  IMPORTANT: After deploying your Render backend, update this URL
-//  to point to your Render service. Keep the trailing slash.
+//  IMPORTANT: Replace the URL below with your actual Render URL
 // =============================================================
 const BACKEND_URL = "https://ai-discovery-tx39.onrender.com";
 // =============================================================
@@ -33,7 +32,8 @@ let state = {
   finalTranscript: '',
   silenceTimer: null,
   clientName: '',
-  businessName: ''
+  businessName: '',
+  email: ''
 };
 
 // ----- DOM refs -----
@@ -50,6 +50,7 @@ const durationEl = document.getElementById('duration');
 const textInput = document.getElementById('text-input');
 const clientNameInput = document.getElementById('client-name');
 const businessNameInput = document.getElementById('business-name');
+const emailInput = document.getElementById('email');
 const nameSection = document.getElementById('name-section');
 
 const startBtn = document.getElementById('start-btn');
@@ -67,7 +68,7 @@ function showWarn(msg) { warnEl.textContent = msg; }
 function clearWarn() { warnEl.textContent = ''; }
 function showOk(msg, autoclear) {
   okMsgEl.textContent = msg;
-  if (autoclear) setTimeout(function() { okMsgEl.textContent = ''; }, 4000);
+  if (autoclear) setTimeout(function() { okMsgEl.textContent = ''; }, 4500);
 }
 function timestamp() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -76,6 +77,9 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, function(c) {
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
   });
+}
+function isValidEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 }
 
 function updateStats() {
@@ -108,14 +112,13 @@ function renderTranscript() {
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
-// ----- Speech (browser built-in for now; swap to ElevenLabs later) -----
+// ----- Speech (browser built-in) -----
 function speak(text, onDone) {
   if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
   const voices = window.speechSynthesis.getVoices();
-  // Prefer a clear English voice — try in order: SA, GB, US, AU, then any English
   const preferred =
     voices.find(function(v) { return /en-ZA/i.test(v.lang); }) ||
     voices.find(function(v) { return /en-GB/i.test(v.lang) && /female|samantha|kate|karen|tessa|fiona|serena/i.test(v.name); }) ||
@@ -175,8 +178,7 @@ async function generateNextQuestion() {
       })
     });
     if (!response.ok) throw new Error('Backend ' + response.status);
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (err) {
     console.error('Backend error', err);
     showWarn('Could not reach the backend. Falling back to next topic.');
@@ -209,7 +211,7 @@ async function handleAnswerAndContinue() {
 }
 
 async function saveTranscriptToBackend() {
-  setStatus('Saving transcript...', 'thinking');
+  setStatus('Saving and generating your summary...', 'thinking');
   try {
     const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/save-transcript', {
       method: 'POST',
@@ -217,6 +219,7 @@ async function saveTranscriptToBackend() {
       body: JSON.stringify({
         clientName: state.clientName,
         businessName: state.businessName,
+        email: state.email,
         startTime: state.startTime ? new Date(state.startTime).toISOString() : null,
         endTime: new Date().toISOString(),
         durationSeconds: state.startTime ? Math.round((Date.now() - state.startTime) / 1000) : 0,
@@ -225,11 +228,11 @@ async function saveTranscriptToBackend() {
       })
     });
     if (!response.ok) throw new Error('Save failed: ' + response.status);
-    showOk('Transcript saved successfully.', true);
-    setStatus('Done. Transcript saved to Google Sheets.', null);
+    showOk('All saved. Your summary will be emailed to ' + state.email + ' shortly.', true);
+    setStatus('Done. Thanks!', null);
   } catch (err) {
     console.error('Save error', err);
-    showWarn('Could not save transcript automatically. Use Download to keep a local copy.');
+    showWarn('Could not save automatically. Use Download to keep a local copy of your transcript.');
   }
 }
 
@@ -264,7 +267,7 @@ async function captureAnswer(text) {
   setStatus('Got it. Thinking about what to ask next...', 'thinking');
 
   if (state.callOver) {
-    const closing = "That's everything I wanted to ask. Thanks so much for taking the time — this gives a really clear picture. Your answers have been saved.";
+    const closing = "That's everything I wanted to ask. Thanks so much for taking the time — this gives a really clear picture. We'll send your written summary to your email shortly.";
     pushAgent(closing);
     await saveTranscriptToBackend();
     speak(closing);
@@ -313,12 +316,18 @@ function setupRecognition() {
 function startCall() {
   const cn = (clientNameInput.value || '').trim();
   const bn = (businessNameInput.value || '').trim();
-  if (!cn || !bn) {
-    showWarn('Please enter your name and business name before starting.');
+  const em = (emailInput.value || '').trim();
+  if (!cn || !bn || !em) {
+    showWarn('Please enter your name, business name, and email before starting.');
+    return;
+  }
+  if (!isValidEmail(em)) {
+    showWarn('That email address looks invalid. Please double-check it.');
     return;
   }
   state.clientName = cn;
   state.businessName = bn;
+  state.email = em;
   clearWarn();
 
   state.started = true;
@@ -330,6 +339,7 @@ function startCall() {
   exportBtn.disabled = false;
   clientNameInput.disabled = true;
   businessNameInput.disabled = true;
+  emailInput.disabled = true;
   nameSection.style.opacity = '0.5';
 
   state.currentTopicIdx = 0;
@@ -342,7 +352,7 @@ function startCall() {
 async function endCallEarly() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
-  const closing = "Thanks for your time — your answers have been saved.";
+  const closing = "Thanks for your time — your answers have been saved and we'll send your summary to your email shortly.";
   pushAgent(closing);
   await saveTranscriptToBackend();
   speak(closing);
@@ -355,6 +365,7 @@ function exportTranscript() {
     'Business Discovery Interview Transcript',
     'Client: ' + state.clientName,
     'Business: ' + state.businessName,
+    'Email: ' + state.email,
     'Date: ' + new Date().toLocaleString(),
     'Duration: ' + durationEl.textContent,
     'Topics covered: ' + state.topicsCovered.size + ' of ' + TOPICS.length,
@@ -382,7 +393,7 @@ function resetAll() {
     questionsAsked: 0, topicsCovered: new Set(), transcript: [],
     startTime: null, timerInterval: null, recognition: state.recognition,
     isListening: false, isSpeaking: false, finalTranscript: '', silenceTimer: null,
-    clientName: '', businessName: ''
+    clientName: '', businessName: '', email: ''
   };
   currentQEl.textContent = "When you press start, the agent will ask its first question and listen for your reply.";
   topicPill.textContent = 'Intro';
@@ -392,10 +403,10 @@ function resetAll() {
   startBtn.disabled = false; stopBtn.disabled = true;
   textInput.disabled = true; sendTextBtn.disabled = true;
   exportBtn.disabled = true;
-  clientNameInput.disabled = false; businessNameInput.disabled = false;
+  clientNameInput.disabled = false; businessNameInput.disabled = false; emailInput.disabled = false;
   nameSection.style.opacity = '1';
   textInput.value = '';
-  clientNameInput.value = ''; businessNameInput.value = '';
+  clientNameInput.value = ''; businessNameInput.value = ''; emailInput.value = '';
   clearWarn(); okMsgEl.textContent = '';
 }
 
