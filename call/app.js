@@ -1,7 +1,5 @@
 // =============================================================
-//  Business Discovery Voice Agent — Frontend (v2)
-// =============================================================
-//  IMPORTANT: Replace the URL below with your actual Render URL
+//  Business Discovery Voice Agent — Frontend (v3)
 // =============================================================
 const BACKEND_URL = "https://ai-discovery-tx39.onrender.com";
 // =============================================================
@@ -10,10 +8,10 @@ const TOPICS = [
   { id: 'business_overview',     label: 'Business overview',    opener: "To start, can you tell me about your business — what you do, who your customers are, and roughly how big the team is?" },
   { id: 'daily_operations',      label: 'Daily operations',     opener: "Walk me through a typical day or week in the business. What are the main activities and who does what?" },
   { id: 'systems_tools',         label: 'Systems and tools',    opener: "What software, systems, or tools do you currently use to run the business? Things like CRM, accounting, email, project management." },
-  { id: 'manual_work',           label: 'Manual work',          opener: "What tasks do you or your team do manually that feel like they could or should be automated?" },
+  { id: 'manual_work',           label: 'Manual work',          opener: "Now let's get specific. What tasks do you or your team do manually that, when you really think about it, feel like a computer could probably do them?" },
   { id: 'pain_points',           label: 'Pain points',          opener: "What are the biggest pain points or frustrations in the business right now? The things that genuinely slow you down or stress you out." },
   { id: 'customer_interactions', label: 'Customer interactions',opener: "Tell me about how you interact with customers. Inquiries, support, follow-ups, that sort of thing." },
-  { id: 'priorities_goals',      label: 'Priorities and goals', opener: "If you could wave a magic wand and have one thing in your business automated or improved tomorrow, what would it be?" }
+  { id: 'priorities_goals',      label: 'Priorities and goals', opener: "If you could wave a magic wand and have one thing in your business automated or improved tomorrow, what would it be — and why that one?" }
 ];
 
 let state = {
@@ -36,7 +34,6 @@ let state = {
   email: ''
 };
 
-// ----- DOM refs -----
 const dot = document.getElementById('dot');
 const statusEl = document.getElementById('status');
 const currentQEl = document.getElementById('current-q-text');
@@ -59,7 +56,6 @@ const sendTextBtn = document.getElementById('send-text-btn');
 const exportBtn = document.getElementById('export-btn');
 const resetBtn = document.getElementById('reset-btn');
 
-// ----- Helpers -----
 function setStatus(text, mode) {
   statusEl.textContent = text;
   dot.className = 'dot' + (mode ? ' ' + mode : '');
@@ -68,7 +64,7 @@ function showWarn(msg) { warnEl.textContent = msg; }
 function clearWarn() { warnEl.textContent = ''; }
 function showOk(msg, autoclear) {
   okMsgEl.textContent = msg;
-  if (autoclear) setTimeout(function() { okMsgEl.textContent = ''; }, 4500);
+  if (autoclear) setTimeout(function() { okMsgEl.textContent = ''; }, 6000);
 }
 function timestamp() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -112,7 +108,6 @@ function renderTranscript() {
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
-// ----- Speech (browser built-in) -----
 function speak(text, onDone) {
   if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
   window.speechSynthesis.cancel();
@@ -127,15 +122,13 @@ function speak(text, onDone) {
     voices.find(function(v) { return /en-US/i.test(v.lang); }) ||
     voices.find(function(v) { return v.lang.startsWith('en'); });
   if (preferred) utter.voice = preferred;
-
   state.isSpeaking = true;
-  setStatus('Agent speaking...', 'speaking');
+  setStatus('Agent speaking…', 'speaking');
   utter.onend  = function() { state.isSpeaking = false; if (onDone) onDone(); };
   utter.onerror = function() { state.isSpeaking = false; if (onDone) onDone(); };
   window.speechSynthesis.speak(utter);
 }
 
-// ----- Transcript helpers -----
 function pushAgent(text) {
   const topicLabel = TOPICS[state.currentTopicIdx] ? TOPICS[state.currentTopicIdx].label : '';
   currentQEl.textContent = text;
@@ -152,9 +145,8 @@ function pushUser(text) {
   renderTranscript();
 }
 
-// ----- Backend calls -----
 async function generateNextQuestion() {
-  setStatus('Agent thinking...', 'thinking');
+  setStatus('Agent thinking…', 'thinking');
   const currentTopic = TOPICS[state.currentTopicIdx];
   const isLastTopic = state.currentTopicIdx >= TOPICS.length - 1;
   const remainingTopics = TOPICS.slice(state.currentTopicIdx + 1).map(function(t) { return t.label; });
@@ -184,7 +176,7 @@ async function generateNextQuestion() {
     showWarn('Could not reach the backend. Falling back to next topic.');
     const nextIdx = state.currentTopicIdx + 1;
     if (nextIdx >= TOPICS.length) {
-      return { next_question: "Thanks for sharing all of this. Is there anything I haven't asked about that you think I should know?", action: 'wrap_up' };
+      return { next_question: "Thanks for sharing all of this. Is there anything I haven't asked about that you think would be useful for me to know?", action: 'wrap_up' };
     }
     return { next_question: TOPICS[nextIdx].opener, action: 'next_topic' };
   }
@@ -211,7 +203,7 @@ async function handleAnswerAndContinue() {
 }
 
 async function saveTranscriptToBackend() {
-  setStatus('Saving and generating your summary...', 'thinking');
+  setStatus('Saving your transcript…', 'thinking');
   try {
     const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/save-transcript', {
       method: 'POST',
@@ -228,7 +220,7 @@ async function saveTranscriptToBackend() {
       })
     });
     if (!response.ok) throw new Error('Save failed: ' + response.status);
-    showOk('All saved. Your summary will be emailed to ' + state.email + ' shortly.', true);
+    showOk("All saved. We'll be in touch at " + state.email + " within 48 hours with your bespoke roadmap.", true);
     setStatus('Done. Thanks!', null);
   } catch (err) {
     console.error('Save error', err);
@@ -236,7 +228,6 @@ async function saveTranscriptToBackend() {
   }
 }
 
-// ----- Speech recognition -----
 function startListening() {
   if (!state.recognition) {
     setStatus('Mic not available — type your answer below.', null);
@@ -264,10 +255,10 @@ async function captureAnswer(text) {
   text = text.trim();
   if (!text) return;
   pushUser(text);
-  setStatus('Got it. Thinking about what to ask next...', 'thinking');
+  setStatus('Got it. Thinking about what to ask next…', 'thinking');
 
   if (state.callOver) {
-    const closing = "That's everything I wanted to ask. Thanks so much for taking the time — this gives a really clear picture. We'll send your written summary to your email shortly.";
+    const closing = "That's everything I wanted to ask. Thanks so much for taking the time. A human will now review what you've shared, and your bespoke roadmap will land in your inbox within 48 hours.";
     pushAgent(closing);
     await saveTranscriptToBackend();
     speak(closing);
@@ -312,7 +303,6 @@ function setupRecognition() {
   state.recognition = rec;
 }
 
-// ----- Lifecycle -----
 function startCall() {
   const cn = (clientNameInput.value || '').trim();
   const bn = (businessNameInput.value || '').trim();
@@ -344,7 +334,7 @@ function startCall() {
 
   state.currentTopicIdx = 0;
   state.exchangesOnTopic = 1;
-  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. " + TOPICS[0].opener;
+  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. I'll ask you a series of questions about your business — there's no recommendations from me on the call, that comes after in your bespoke roadmap. Let's get started. " + TOPICS[0].opener;
   pushAgent(opener);
   speak(opener, function() { startListening(); });
 }
@@ -352,7 +342,7 @@ function startCall() {
 async function endCallEarly() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
-  const closing = "Thanks for your time — your answers have been saved and we'll send your summary to your email shortly.";
+  const closing = "Thanks for your time. We'll review what you've shared and send your bespoke roadmap within 48 hours.";
   pushAgent(closing);
   await saveTranscriptToBackend();
   speak(closing);
@@ -410,7 +400,6 @@ function resetAll() {
   clearWarn(); okMsgEl.textContent = '';
 }
 
-// ----- Wire up events -----
 startBtn.addEventListener('click', startCall);
 stopBtn.addEventListener('click', endCallEarly);
 exportBtn.addEventListener('click', exportTranscript);
@@ -424,7 +413,6 @@ sendTextBtn.addEventListener('click', function() {
 });
 textInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') sendTextBtn.click(); });
 
-// Initialise
 setupRecognition();
 if ('speechSynthesis' in window) {
   window.speechSynthesis.getVoices();
