@@ -4,7 +4,7 @@
 //  IMPORTANT: After deploying your Render backend, update this URL
 //  to point to your Render service. Keep the trailing slash.
 // =============================================================
-const BACKEND_URL = "https://YOUR-RENDER-APP.onrender.com";
+const BACKEND_URL = "https://ai-discovery-tx39.onrender.com";
 // =============================================================
 
 const TOPICS = [
