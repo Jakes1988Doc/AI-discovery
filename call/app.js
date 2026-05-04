@@ -258,7 +258,7 @@ async function captureAnswer(text) {
   setStatus('Got it. Thinking about what to ask next…', 'thinking');
 
   if (state.callOver) {
-    const closing = "That's everything I wanted to ask. Thanks so much for taking the time. A human will now review what you've shared. If we identify a clear fit for AI in your business, we'll send you a tailored quote within 24 hours. No pressure either way.";
+    const closing = "That's everything I wanted to ask. Thanks so much for taking the time. A human will now review what you've shared. If we identify a clear fit for AI in your business, we'll be in touch about the £350 bespoke roadmap. No pressure either way.";
     pushAgent(closing);
     await saveTranscriptToBackend();
     speak(closing);
@@ -342,7 +342,7 @@ function startCall() {
 async function endCallEarly() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
-  const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll send a tailored quote within 24 hours. No obligation either way.";
+  const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll be in touch about the £350 roadmap. No obligation either way.";
   pushAgent(closing);
   await saveTranscriptToBackend();
   speak(closing);
