@@ -220,7 +220,7 @@ async function saveTranscriptToBackend() {
       })
     });
     if (!response.ok) throw new Error('Save failed: ' + response.status);
-    showOk("All saved. We'll be in touch at " + state.email + " within 48 hours with your bespoke roadmap.", true);
+    showOk("All saved. We'll be in touch at " + state.email + " shortly.", true);
     setStatus('Done. Thanks!', null);
   } catch (err) {
     console.error('Save error', err);
@@ -258,7 +258,7 @@ async function captureAnswer(text) {
   setStatus('Got it. Thinking about what to ask next…', 'thinking');
 
   if (state.callOver) {
-    const closing = "That's everything I wanted to ask. Thanks so much for taking the time. A human will now review what you've shared, and your bespoke roadmap will land in your inbox within 48 hours.";
+    const closing = "That's everything I wanted to ask. Thanks so much for taking the time. A human will now review what you've shared. If we identify a clear fit for AI in your business, we'll send you a tailored quote within 24 hours. No pressure either way.";
     pushAgent(closing);
     await saveTranscriptToBackend();
     speak(closing);
@@ -334,7 +334,7 @@ function startCall() {
 
   state.currentTopicIdx = 0;
   state.exchangesOnTopic = 1;
-  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. I'll ask you a series of questions about your business — there's no recommendations from me on the call, that comes after in your bespoke roadmap. Let's get started. " + TOPICS[0].opener;
+  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. I'll ask you a series of questions about your business — there's no recommendations from me on the call, and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
   pushAgent(opener);
   speak(opener, function() { startListening(); });
 }
@@ -342,7 +342,7 @@ function startCall() {
 async function endCallEarly() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
-  const closing = "Thanks for your time. We'll review what you've shared and send your bespoke roadmap within 48 hours.";
+  const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll send a tailored quote within 24 hours. No obligation either way.";
   pushAgent(closing);
   await saveTranscriptToBackend();
   speak(closing);
