@@ -1,22 +1,21 @@
 // ============================================================
-//  Business Discovery Agent — Backend (Render.com) — v2
+//  AI Growth Catalyst — Backend (Render.com) — v4 (quote model)
 // ============================================================
 //  Handles:
 //    1. Proxying calls to the Anthropic Claude API
-//    2. Generating a structured Word document summary per call
+//    2. Generating internal notes Word doc (sent to BCC only)
 //    3. Saving raw transcript to Google Sheets
-//    4. Emailing the Word summary to the client
+//    4. Sending acknowledgement email — promises a quote within 24hr
 //
 //  Environment variables required (set in Render dashboard):
-//    ANTHROPIC_API_KEY            — your Anthropic key (sk-ant-...)
-//    GOOGLE_SHEETS_ID             — long ID from your Sheet's URL
-//    GOOGLE_SERVICE_ACCOUNT_JSON  — full service-account JSON contents
-//    ALLOWED_ORIGIN               — your GitHub Pages URL (no trailing slash)
-//    RESEND_API_KEY               — get free at https://resend.com (3000 emails/mo free)
-//    FROM_EMAIL                   — e.g. "AI Discovery <onboarding@resend.dev>"
-//                                    OR a verified domain address
-//    BCC_EMAIL                    — (optional) your own email to receive a copy of every summary
-//    PORT                         — set automatically by Render
+//    ANTHROPIC_API_KEY
+//    GOOGLE_SHEETS_ID
+//    GOOGLE_SERVICE_ACCOUNT_JSON
+//    ALLOWED_ORIGIN
+//    RESEND_API_KEY
+//    FROM_EMAIL                  e.g. "AI Growth Catalyst <onboarding@resend.dev>"
+//    BCC_EMAIL                   your email — gets internal notes
+//    PORT
 // ============================================================
 
 const express = require('express');
@@ -24,7 +23,7 @@ const cors = require('cors');
 const { google } = require('googleapis');
 const {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
-  LevelFormat, BorderStyle, PageOrientation
+  LevelFormat, BorderStyle
 } = require('docx');
 
 const app = express();
@@ -38,19 +37,26 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID;
 const SVC_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'AI Discovery <onboarding@resend.dev>';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'AI Growth Catalyst <onboarding@resend.dev>';
 const BCC_EMAIL = process.env.BCC_EMAIL || '';
 
-const INTERVIEWER_PROMPT = `You are a skilled business discovery interviewer conducting a voice conversation with a business owner. Your goal is to deeply understand their business, current systems, manual processes, and pain points so that someone else can later identify AI automation opportunities.
+const INTERVIEWER_PROMPT = `You are a skilled business discovery interviewer conducting a voice conversation with a small or medium business owner. Your goal is to deeply understand their business, current systems, manual processes, and pain points so a human consultant can later produce a bespoke automation roadmap.
 
 ABSOLUTE RULES:
-1. NEVER recommend, suggest, or hint at solutions, tools, or automations. Not even subtly.
+1. You NEVER recommend, suggest, or hint at solutions, tools, or automations.
 2. NEVER say things like "you could try", "have you considered", "AI could help with that", or "many businesses use X for that".
-3. Your only job is to ASK and LISTEN. Capture context, not give advice.
-4. Stay curious. Dig into specifics — numbers, frequencies, who is involved, what breaks, when it started.
-5. Use natural conversational language. You are speaking, not writing. Keep questions to 1-2 sentences max.
-6. Reference earlier things they said when relevant.
-7. If an answer is vague, ask for a specific example. If an answer is rich, move on.
+3. Stay curious. Dig into specifics — numbers, frequencies, who is involved, what breaks, when it started, what it costs.
+4. Use natural conversational language. Keep questions to 1-2 sentences max.
+5. Reference earlier things they said when relevant.
+6. If an answer is vague, ask for a specific example. If an answer is rich, move on.
+
+PROMPTING AUTOMATION THINKING (without recommending):
+Use questions like:
+- "When you do that, are there parts of it that feel like a computer could handle?"
+- "If you imagine your ideal version of that process, what does it look like?"
+- "What would have to change for that to take half the time?"
+- "Have you ever thought 'someone really needs to fix this' about that task?"
+- "If you could clone yourself just for that one task, what would you have the clone do?"
 
 Respond in JSON only:
 {
@@ -59,33 +65,29 @@ Respond in JSON only:
   "reasoning": "one short sentence on why"
 }`;
 
-const SUMMARY_PROMPT = `You are summarising a business discovery interview. The interview was conducted by a voice agent that asked the business owner about their operations, systems, manual work, pain points, and priorities.
-
-Produce a structured JSON summary with these exact fields. Be specific — pull out numbers, tool names, frequencies, and direct phrasing. Do NOT recommend solutions. This is purely a capture document.
+const INTERNAL_NOTES_PROMPT = `You are summarising a business discovery interview for an internal consultant who will use these notes to write a bespoke AI automation roadmap. Be specific — pull out numbers, tool names, frequencies, time-costs, exact phrasing.
 
 Respond ONLY with valid JSON, no markdown fences:
 {
-  "executiveSummary": "2-3 sentence high-level overview of the business and its key challenges",
+  "executiveSummary": "2-3 sentence overview of the business and its key operational challenges",
   "businessOverview": "What they do, who their customers are, team size, business model",
-  "currentSystems": ["list of tools, software, and systems they currently use"],
-  "manualWork": ["list of specific manual or repetitive tasks identified, with frequency/time-cost where stated"],
-  "painPoints": ["list of specific pain points and frustrations, with context on impact"],
-  "customerInteractions": "Summary of how they handle customer inquiries, support, and follow-ups",
-  "priorities": ["list of stated priorities and what they wish was different"],
-  "notableQuotes": ["2-4 direct verbatim quotes that capture the business owner's voice"],
-  "automationOpportunities": ["objective list of areas where automation COULD apply, framed as observations not recommendations — e.g. 'Quoting currently takes 3 hours per week and is done manually in Excel'"]
+  "currentSystems": ["each tool/system mentioned, with how it's used"],
+  "manualWork": ["each manual task identified, with frequency and time-cost where stated"],
+  "painPoints": ["each pain point with context on impact"],
+  "customerInteractions": "How they handle inquiries, support, follow-ups",
+  "priorities": ["stated priorities and what they wish was different"],
+  "clientAutomationHypotheses": ["any specific tasks the CLIENT themselves identified as automatable"],
+  "automationOpportunities": ["YOUR objective observations of areas worth exploring"],
+  "redFlags": ["any concerns about readiness for automation"],
+  "notableQuotes": ["3-5 direct verbatim quotes"],
+  "suggestedFirstFocus": "your single best guess at where the consultant should focus the roadmap",
+  "fitAssessment": "Brief: strong fit / moderate fit / weak fit / no clear fit, with one sentence reasoning",
+  "suggestedQuotePrice": "Best guess at appropriate quote: '£250', '£350', '£450' or 'No quote — not a fit'. Base it on business size, complexity, and clarity of the opportunity."
 }`;
 
 // ============================================================
-//  Health check
-// ============================================================
 app.get('/', (req, res) => {
-  res.json({
-    ok: true,
-    service: 'discovery-agent-backend',
-    version: '2.0',
-    time: new Date().toISOString()
-  });
+  res.json({ ok: true, service: 'ai-growth-catalyst-backend', version: '4.0-quote', time: new Date().toISOString() });
 });
 
 // ============================================================
@@ -95,7 +97,6 @@ app.post('/api/next-question', async (req, res) => {
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
-
   const {
     messages = [], currentTopic = '', topicIndex = 0, totalTopics = 7,
     exchangesOnTopic = 1, remainingTopics = [], isLastTopic = false
@@ -105,7 +106,7 @@ app.post('/api/next-question', async (req, res) => {
 EXCHANGES ON THIS TOPIC SO FAR: ${exchangesOnTopic}
 REMAINING TOPICS AFTER THIS: ${remainingTopics.length ? remainingTopics.join(', ') : 'none — this is the last topic'}
 
-Based on the conversation history, decide whether to ask another follow-up on "${currentTopic}" or move to the next topic. Aim for 2-4 exchanges per topic — fewer if rich, more if thin. ${isLastTopic ? 'This is the LAST topic. After 2-3 exchanges, set action to "wrap_up".' : ''}
+Aim for 2-4 exchanges per topic. ${isLastTopic ? 'This is the LAST topic. After 2-3 exchanges, set action to "wrap_up".' : ''}
 
 Respond with JSON only.`;
 
@@ -138,7 +139,6 @@ Respond with JSON only.`;
     try {
       parsed = JSON.parse(cleaned);
     } catch (e) {
-      console.warn('JSON parse fallback', text);
       parsed = { next_question: 'Can you tell me more about that?', action: 'followup' };
     }
     res.json(parsed);
@@ -149,9 +149,7 @@ Respond with JSON only.`;
 });
 
 // ============================================================
-//  Generate structured summary via Claude
-// ============================================================
-async function generateSummary(transcript, clientName, businessName) {
+async function generateInternalNotes(transcript, clientName, businessName) {
   const transcriptText = transcript.map(t => {
     const role = t.role === 'agent' ? 'AGENT' : 'CLIENT';
     return role + ': ' + t.text;
@@ -166,15 +164,12 @@ async function generateSummary(transcript, clientName, businessName) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2500,
-      system: SUMMARY_PROMPT,
-      messages: [{
-        role: 'user',
-        content: `Client: ${clientName}\nBusiness: ${businessName}\n\nTRANSCRIPT:\n\n${transcriptText}\n\nReturn JSON only.`
-      }]
+      max_tokens: 3000,
+      system: INTERNAL_NOTES_PROMPT,
+      messages: [{ role: 'user', content: `Client: ${clientName}\nBusiness: ${businessName}\n\nTRANSCRIPT:\n\n${transcriptText}\n\nReturn JSON only.` }]
     })
   });
-  if (!r.ok) throw new Error('Summary API failed: ' + r.status);
+  if (!r.ok) throw new Error('Notes API failed: ' + r.status);
   const data = await r.json();
   const text = data.content.filter(c => c.type === 'text').map(c => c.text).join('').trim();
   const cleaned = text.replace(/```json\s*|\s*```/g, '').trim();
@@ -182,144 +177,104 @@ async function generateSummary(transcript, clientName, businessName) {
 }
 
 // ============================================================
-//  Build a Word document from the structured summary
-// ============================================================
-function buildSummaryDocx(summary, meta) {
-  const { clientName, businessName, dateStr, durationStr } = meta;
+function buildInternalNotesDocx(notes, meta) {
+  const { clientName, businessName, email, dateStr, durationStr } = meta;
 
-  // Helper to create a section heading
   const heading = (text) => new Paragraph({
     heading: HeadingLevel.HEADING_2,
     spacing: { before: 360, after: 120 },
     children: [new TextRun({ text, bold: true, size: 28, color: '1F2937' })]
   });
-
-  // Helper to create a paragraph of body text
   const body = (text) => new Paragraph({
     spacing: { after: 120 },
     children: [new TextRun({ text, size: 22, color: '374151' })]
   });
-
-  // Helper to create a bulleted item
   const bullet = (text) => new Paragraph({
     numbering: { reference: 'bullets', level: 0 },
     spacing: { after: 80 },
     children: [new TextRun({ text, size: 22, color: '374151' })]
   });
-
-  // Helper for quote-style
   const quote = (text) => new Paragraph({
     spacing: { before: 80, after: 80 },
     indent: { left: 360 },
-    border: { left: { style: BorderStyle.SINGLE, size: 16, color: '4A8CFF', space: 8 } },
+    border: { left: { style: BorderStyle.SINGLE, size: 16, color: 'C85A3E', space: 8 } },
     children: [new TextRun({ text: '"' + text + '"', italics: true, size: 22, color: '4B5563' })]
   });
 
   const children = [];
-
-  // Title
-  children.push(new Paragraph({
-    alignment: AlignmentType.LEFT,
-    spacing: { after: 80 },
-    children: [new TextRun({ text: 'AI Discovery Call Summary', bold: true, size: 40, color: '0F172A' })]
-  }));
+  children.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: 'Internal Discovery Notes', bold: true, size: 40, color: '1A2332' })] }));
+  children.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: businessName, size: 28, color: 'C85A3E', bold: true })] }));
   children.push(new Paragraph({
     spacing: { after: 360 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '4A8CFF', space: 4 } },
-    children: [new TextRun({ text: businessName, size: 28, color: '4A8CFF', bold: true })]
+    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'C85A3E', space: 4 } },
+    children: [new TextRun({ text: 'For roadmap drafting and quote decision', italics: true, size: 18, color: 'B8843A' })]
   }));
+  children.push(new Paragraph({ spacing: { after: 80 }, children: [
+    new TextRun({ text: 'Client: ', bold: true, size: 22, color: '374151' }),
+    new TextRun({ text: clientName + ' <' + email + '>', size: 22, color: '374151' })
+  ]}));
+  children.push(new Paragraph({ spacing: { after: 80 }, children: [
+    new TextRun({ text: 'Date: ', bold: true, size: 22, color: '374151' }),
+    new TextRun({ text: dateStr, size: 22, color: '374151' })
+  ]}));
+  children.push(new Paragraph({ spacing: { after: 240 }, children: [
+    new TextRun({ text: 'Call duration: ', bold: true, size: 22, color: '374151' }),
+    new TextRun({ text: durationStr, size: 22, color: '374151' })
+  ]}));
 
-  // Meta block
-  children.push(new Paragraph({
-    spacing: { after: 80 },
-    children: [
-      new TextRun({ text: 'Client: ', bold: true, size: 22, color: '374151' }),
-      new TextRun({ text: clientName, size: 22, color: '374151' })
-    ]
-  }));
-  children.push(new Paragraph({
-    spacing: { after: 80 },
-    children: [
-      new TextRun({ text: 'Date: ', bold: true, size: 22, color: '374151' }),
-      new TextRun({ text: dateStr, size: 22, color: '374151' })
-    ]
-  }));
-  children.push(new Paragraph({
-    spacing: { after: 240 },
-    children: [
-      new TextRun({ text: 'Call duration: ', bold: true, size: 22, color: '374151' }),
-      new TextRun({ text: durationStr, size: 22, color: '374151' })
-    ]
-  }));
-
-  // Executive summary
-  if (summary.executiveSummary) {
-    children.push(heading('Executive Summary'));
-    children.push(body(summary.executiveSummary));
+  // Quote suggestion at top — actionable for you
+  if (notes.suggestedQuotePrice) {
+    children.push(heading('Suggested Quote Price'));
+    children.push(new Paragraph({
+      spacing: { after: 240 },
+      indent: { left: 360 },
+      border: { left: { style: BorderStyle.SINGLE, size: 16, color: 'C85A3E', space: 8 } },
+      children: [new TextRun({ text: notes.suggestedQuotePrice, italics: false, size: 28, color: 'A3432B', bold: true })]
+    }));
   }
-
-  // Business overview
-  if (summary.businessOverview) {
-    children.push(heading('Business Overview'));
-    children.push(body(summary.businessOverview));
+  if (notes.fitAssessment) {
+    children.push(heading('Fit Assessment'));
+    children.push(new Paragraph({
+      spacing: { after: 240 },
+      indent: { left: 360 },
+      border: { left: { style: BorderStyle.SINGLE, size: 16, color: 'B8843A', space: 8 } },
+      children: [new TextRun({ text: notes.fitAssessment, italics: true, size: 22, color: '7A5825', bold: true })]
+    }));
   }
-
-  // Current systems
-  if (summary.currentSystems && summary.currentSystems.length) {
-    children.push(heading('Current Systems & Tools'));
-    summary.currentSystems.forEach(s => children.push(bullet(s)));
+  if (notes.executiveSummary) { children.push(heading('Executive Summary')); children.push(body(notes.executiveSummary)); }
+  if (notes.suggestedFirstFocus) {
+    children.push(heading('Suggested First Focus'));
+    children.push(new Paragraph({
+      spacing: { after: 240 }, indent: { left: 360 },
+      border: { left: { style: BorderStyle.SINGLE, size: 16, color: '6B8268', space: 8 } },
+      children: [new TextRun({ text: notes.suggestedFirstFocus, italics: true, size: 22, color: '3C4D3A', bold: true })]
+    }));
   }
-
-  // Manual work
-  if (summary.manualWork && summary.manualWork.length) {
-    children.push(heading('Manual & Repetitive Work'));
-    summary.manualWork.forEach(s => children.push(bullet(s)));
+  if (notes.businessOverview) { children.push(heading('Business Overview')); children.push(body(notes.businessOverview)); }
+  if (notes.currentSystems?.length) { children.push(heading('Current Systems & Tools')); notes.currentSystems.forEach(s => children.push(bullet(s))); }
+  if (notes.manualWork?.length) { children.push(heading('Manual & Repetitive Work')); notes.manualWork.forEach(s => children.push(bullet(s))); }
+  if (notes.painPoints?.length) { children.push(heading('Pain Points')); notes.painPoints.forEach(s => children.push(bullet(s))); }
+  if (notes.customerInteractions) { children.push(heading('Customer Interactions')); children.push(body(notes.customerInteractions)); }
+  if (notes.priorities?.length) { children.push(heading('Priorities & Stated Goals')); notes.priorities.forEach(s => children.push(bullet(s))); }
+  if (notes.clientAutomationHypotheses?.length) {
+    children.push(heading("Client's Own Automation Hypotheses"));
+    children.push(body('Tasks the client themselves flagged as potentially automatable:'));
+    notes.clientAutomationHypotheses.forEach(s => children.push(bullet(s)));
   }
+  if (notes.automationOpportunities?.length) { children.push(heading('Observed Automation Opportunities')); notes.automationOpportunities.forEach(s => children.push(bullet(s))); }
+  if (notes.redFlags?.length) { children.push(heading('Red Flags & Readiness Concerns')); notes.redFlags.forEach(s => children.push(bullet(s))); }
+  if (notes.notableQuotes?.length) { children.push(heading('Notable Quotes')); notes.notableQuotes.forEach(q => children.push(quote(q))); }
 
-  // Pain points
-  if (summary.painPoints && summary.painPoints.length) {
-    children.push(heading('Pain Points'));
-    summary.painPoints.forEach(s => children.push(bullet(s)));
-  }
-
-  // Customer interactions
-  if (summary.customerInteractions) {
-    children.push(heading('Customer Interactions'));
-    children.push(body(summary.customerInteractions));
-  }
-
-  // Priorities
-  if (summary.priorities && summary.priorities.length) {
-    children.push(heading('Priorities & Stated Goals'));
-    summary.priorities.forEach(s => children.push(bullet(s)));
-  }
-
-  // Automation opportunities (observations only, never recommendations)
-  if (summary.automationOpportunities && summary.automationOpportunities.length) {
-    children.push(heading('Areas Worth Exploring'));
-    children.push(body('The following observations from the call are areas where automation could potentially apply. These are descriptions of the current state, not recommendations:'));
-    summary.automationOpportunities.forEach(s => children.push(bullet(s)));
-  }
-
-  // Notable quotes
-  if (summary.notableQuotes && summary.notableQuotes.length) {
-    children.push(heading('Notable Quotes'));
-    summary.notableQuotes.forEach(q => children.push(quote(q)));
-  }
-
-  // Footer
   children.push(new Paragraph({
     spacing: { before: 480 },
     border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'E5E7EB', space: 4 } },
-    children: [new TextRun({ text: 'Generated by AI Discovery — this is a capture document, not professional advice.', italics: true, size: 18, color: '9CA3AF' })]
+    children: [new TextRun({ text: 'Generated automatically from the discovery call transcript.', italics: true, size: 18, color: '9CA3AF' })]
   }));
 
   const doc = new Document({
-    creator: 'AI Discovery',
-    title: 'AI Discovery Call Summary - ' + businessName,
-    styles: {
-      default: { document: { run: { font: 'Calibri', size: 22 } } }
-    },
+    creator: 'AI Growth Catalyst',
+    title: 'Internal Discovery Notes - ' + businessName,
+    styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     numbering: {
       config: [{
         reference: 'bullets',
@@ -331,88 +286,90 @@ function buildSummaryDocx(summary, meta) {
       }]
     },
     sections: [{
-      properties: {
-        page: {
-          size: { width: 11906, height: 16838 }, // A4
-          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
-        }
-      },
-      children: children
+      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+      children
     }]
   });
-
   return Packer.toBuffer(doc);
 }
 
 // ============================================================
-//  Send the Word document via Resend
+//  Client acknowledgement email — quote model (no payment link)
 // ============================================================
-async function emailSummary(toEmail, clientName, businessName, docBuffer) {
-  if (!RESEND_API_KEY) {
-    console.warn('RESEND_API_KEY not set — skipping email send');
-    return { skipped: true };
-  }
-
+async function sendClientAcknowledgement(toEmail, clientName, businessName) {
+  if (!RESEND_API_KEY) return { skipped: true };
   const firstName = (clientName || '').split(' ')[0] || 'there';
-  const subject = 'Your AI Discovery summary — ' + businessName;
+  const subject = "Thanks for your call — what happens next";
+
   const htmlBody = `
-    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color: #374151;">
-      <h2 style="color: #0F172A; margin-bottom: 16px;">Hi ${firstName},</h2>
-      <p style="font-size: 15px; line-height: 1.6;">
-        Thanks for taking the time today. Attached is your written summary from our discovery call about <strong>${businessName}</strong>.
+    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color: #374151; line-height: 1.6;">
+      <h2 style="color: #1a2332; margin-bottom: 16px; font-size: 22px;">Hi ${firstName},</h2>
+      <p style="font-size: 15px; margin-bottom: 16px;">
+        Thanks for taking the time on the discovery call about <strong>${businessName}</strong>. Your transcript has been saved and a human will now review what you shared.
       </p>
-      <p style="font-size: 15px; line-height: 1.6;">
-        It captures your current systems, manual workload, pain points, and stated priorities — straight from the call, in your own words.
+      <div style="background: #fbf6ec; border: 1px solid #e8dec5; border-radius: 12px; padding: 24px; margin: 24px 0;">
+        <p style="font-size: 16px; margin: 0 0 12px; color: #1a2332;"><strong>What happens now</strong></p>
+        <p style="font-size: 14px; margin: 0 0 12px; color: #5d6b80; line-height: 1.6;">If we identify a clear opportunity for AI in your business, we'll send you a tailored quote within 24 hours — typically £250&ndash;£500 depending on the depth of analysis your situation calls for.</p>
+        <p style="font-size: 14px; margin: 0; color: #5d6b80; line-height: 1.6;">If we don't see a clear fit, we'll tell you that honestly. Either way, no follow-up sales pressure.</p>
+      </div>
+      <p style="font-size: 15px; margin-bottom: 16px;">
+        The bespoke roadmap, if you commission it, will cover:
       </p>
-      <p style="font-size: 15px; line-height: 1.6;">
-        It's yours to keep, share, or use however you like. There are no recommendations in this document — just an honest map of where things stand.
-      </p>
-      <p style="font-size: 15px; line-height: 1.6; margin-top: 24px;">
-        All the best,<br/>
-        <strong>The AI Discovery team</strong>
+      <ul style="font-size: 15px; padding-left: 20px; margin-bottom: 16px;">
+        <li style="margin-bottom: 6px;">Where AI could genuinely help — and where it shouldn't</li>
+        <li style="margin-bottom: 6px;">Which tasks are most ripe for automation</li>
+        <li style="margin-bottom: 6px;">A concrete starting point — the single most valuable thing to tackle first</li>
+      </ul>
+      <p style="font-size: 15px;">If anything came to mind after the call you'd like us to factor in, just reply.</p>
+      <p style="font-size: 15px; margin-top: 24px;">
+        Speak soon,<br/>
+        <strong>The AI Growth Catalyst team</strong>
       </p>
       <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 32px 0;" />
-      <p style="font-size: 12px; color: #9CA3AF;">
-        This summary was generated automatically from your call transcript. If anything looks off, just reply to this email.
-      </p>
+      <p style="font-size: 12px; color: #9CA3AF;">AI Growth Catalyst · Helping small and medium-sized businesses navigate AI without the hype.</p>
     </div>
   `;
-
-  const filename = 'ai-discovery-summary-' +
-    (businessName || 'call').replace(/[^a-z0-9]+/gi, '-').toLowerCase() +
-    '-' + new Date().toISOString().slice(0, 10) + '.docx';
-
-  const payload = {
-    from: FROM_EMAIL,
-    to: [toEmail],
-    subject: subject,
-    html: htmlBody,
-    attachments: [{
-      filename: filename,
-      content: docBuffer.toString('base64')
-    }]
-  };
-  if (BCC_EMAIL) payload.bcc = [BCC_EMAIL];
-
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + RESEND_API_KEY
-    },
-    body: JSON.stringify(payload)
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
+    body: JSON.stringify({ from: FROM_EMAIL, to: [toEmail], subject, html: htmlBody })
   });
   if (!r.ok) {
     const errText = await r.text();
-    console.error('Resend error', r.status, errText);
-    throw new Error('Email send failed: ' + r.status);
+    console.error('Client ack email error', r.status, errText);
+    throw new Error('Client email failed: ' + r.status);
+  }
+  return await r.json();
+}
+
+// ============================================================
+async function sendInternalNotes(clientName, businessName, clientEmail, docBuffer, suggestedQuote) {
+  if (!RESEND_API_KEY || !BCC_EMAIL) return { skipped: true };
+  const filename = 'discovery-notes-' +
+    (businessName || 'call').replace(/[^a-z0-9]+/gi, '-').toLowerCase() +
+    '-' + new Date().toISOString().slice(0, 10) + '.docx';
+  const quoteHint = suggestedQuote ? `<p><strong>Suggested quote:</strong> ${suggestedQuote}</p>` : '';
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
+    body: JSON.stringify({
+      from: FROM_EMAIL,
+      to: [BCC_EMAIL],
+      subject: '[Internal] New discovery call: ' + businessName + ' (' + clientName + ')',
+      html: `<div style="font-family: -apple-system, sans-serif;"><p>New discovery call completed. Action: review notes, send quote within 24 hours if appropriate.</p><p><strong>Client:</strong> ${clientName}<br/><strong>Business:</strong> ${businessName}<br/><strong>Email:</strong> ${clientEmail}</p>${quoteHint}<p>Full notes attached.</p></div>`,
+      attachments: [{ filename, content: docBuffer.toString('base64') }]
+    })
+  });
+  if (!r.ok) {
+    const errText = await r.text();
+    console.error('Internal email error', r.status, errText);
+    throw new Error('Internal email failed: ' + r.status);
   }
   return await r.json();
 }
 
 // ============================================================
 //  POST /api/save-transcript
-//  Saves transcript to Sheet, generates Word summary, emails it
 // ============================================================
 app.post('/api/save-transcript', async (req, res) => {
   const {
@@ -421,7 +378,6 @@ app.post('/api/save-transcript', async (req, res) => {
     topicsCovered = [], transcript = []
   } = req.body || {};
 
-  // 1. Save raw transcript to Google Sheets
   const transcriptText = transcript.map(t => {
     const role = t.role === 'agent' ? 'AGENT' : 'CLIENT';
     const topic = t.topic ? ' (' + t.topic + ')' : '';
@@ -437,18 +393,18 @@ app.post('/api/save-transcript', async (req, res) => {
         scopes: ['https://www.googleapis.com/auth/spreadsheets']
       });
       const sheets = google.sheets({ version: 'v4', auth });
+      // Columns: A Timestamp | B Client | C Business | D Email | E Duration | F Topics | G Transcript | H Status
       const row = [
         new Date().toISOString(),
         clientName, businessName, email,
         durationSeconds,
         topicsCovered.join(', '),
-        transcriptText
+        transcriptText,
+        'NEW — quote pending review'
       ];
       await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: 'Sheet1!A1',
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
+        spreadsheetId: SHEET_ID, range: 'Sheet1!A1',
+        valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
         requestBody: { values: [row] }
       });
       sheetSaved = true;
@@ -457,35 +413,36 @@ app.post('/api/save-transcript', async (req, res) => {
     }
   }
 
-  // 2. Generate structured summary + Word document + email
-  let emailed = false;
+  let clientEmailed = false;
+  let internalEmailed = false;
   let summaryError = null;
+
   if (email && transcript.length > 1) {
     try {
-      const summary = await generateSummary(transcript, clientName, businessName);
-      const docBuffer = await buildSummaryDocx(summary, {
-        clientName,
-        businessName,
+      const ackResult = await sendClientAcknowledgement(email, clientName, businessName);
+      clientEmailed = !ackResult.skipped;
+    } catch (err) {
+      console.error('Client ack failed', err);
+      summaryError = err.message;
+    }
+    try {
+      const notes = await generateInternalNotes(transcript, clientName, businessName);
+      const docBuffer = await buildInternalNotesDocx(notes, {
+        clientName, businessName, email,
         dateStr: new Date(startTime || Date.now()).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' }),
         durationStr: Math.floor(durationSeconds / 60) + ' min ' + (durationSeconds % 60) + ' sec'
       });
-      const emailResult = await emailSummary(email, clientName, businessName, docBuffer);
-      emailed = !emailResult.skipped;
+      const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.suggestedQuotePrice);
+      internalEmailed = !internalResult.skipped;
     } catch (err) {
-      console.error('Summary/email error', err);
-      summaryError = err.message;
+      console.error('Internal notes/email error', err);
+      summaryError = (summaryError ? summaryError + ' | ' : '') + err.message;
     }
   }
 
-  res.json({
-    ok: sheetSaved || emailed,
-    sheetSaved,
-    emailed,
-    summaryError
-  });
+  res.json({ ok: sheetSaved || clientEmailed, sheetSaved, clientEmailed, internalEmailed, summaryError });
 });
 
-// ============================================================
 app.listen(PORT, () => {
-  console.log('Discovery agent backend v2 listening on port', PORT);
+  console.log('AI Growth Catalyst backend v4-quote listening on port', PORT);
 });

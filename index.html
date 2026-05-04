@@ -3,543 +3,933 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AI Discovery — Find where AI can actually help your business</title>
-<meta name="description" content="A free 15-minute AI-led discovery call that maps your business's biggest time-drains and pain points. No sales pitch. Just clarity on where AI could genuinely help." />
+<title>AI Growth Catalyst — Leverage AI &amp; implement into your business</title>
+<meta name="description" content="A focused 15-minute discovery call — free with no obligation. Tailored quote (£250–£500) for a bespoke AI roadmap, written by a human consultant." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
   :root {
-    --bg: #0a0e1a;
-    --bg-2: #0f1422;
-    --panel: #131826;
-    --panel-2: #1a2030;
-    --text: #ecf0f7;
-    --text-dim: #9ba3b6;
-    --text-faint: #5a6275;
-    --border: #232938;
-    --accent: #4a8cff;
-    --accent-glow: rgba(74, 140, 255, 0.25);
-    --accent-hover: #5a9cff;
-    --green: #2dba87;
+    --cream: #fbf6ec;
+    --cream-2: #f4ecdc;
+    --cream-3: #ede2cb;
+    --ink: #1a2332;
+    --ink-soft: #2c3a4f;
+    --ink-dim: #5d6b80;
+    --ink-faint: #8b95a6;
+    --terracotta: #c85a3e;
+    --terracotta-deep: #a3432b;
+    --terracotta-soft: #f0d4c8;
+    --sage: #6b8268;
+    --sage-soft: #d4ddc7;
+    --gold: #b8843a;
+    --line: rgba(26, 35, 50, 0.12);
+    --line-soft: rgba(26, 35, 50, 0.06);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
   body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
   }
-
-  /* ----- Background gradient ----- */
-  .bg-glow {
-    position: fixed;
-    top: -200px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 800px;
-    height: 600px;
-    background: radial-gradient(ellipse at center, var(--accent-glow), transparent 70%);
-    pointer-events: none;
-    z-index: 0;
-    filter: blur(40px);
+  .serif {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+  }
+  .serif-italic {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
   }
 
-  /* ----- Top nav ----- */
+  /* ============= TEXTURE BACKGROUND ============= */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(200, 90, 62, 0.08), transparent 70%),
+      radial-gradient(ellipse 50% 50% at 90% 30%, rgba(107, 130, 104, 0.08), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ============= NAV ============= */
   nav {
     position: relative;
     z-index: 10;
-    padding: 1.5rem 2rem;
+    padding: 1.75rem 2rem;
+    max-width: 1280px;
+    margin: 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    max-width: 1200px;
-    margin: 0 auto;
   }
   .logo {
     font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--text);
+    font-weight: 500;
+    color: var(--ink);
     text-decoration: none;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.65rem;
+    letter-spacing: -0.005em;
   }
-  .logo-dot {
-    width: 10px;
-    height: 10px;
-    background: var(--accent);
-    border-radius: 50%;
-    box-shadow: 0 0 12px var(--accent);
+  .logo-mark {
+    width: 28px;
+    height: 28px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+  .logo-mark svg { width: 100%; height: 100%; }
   .nav-links {
     display: flex;
-    gap: 2rem;
+    gap: 2.25rem;
     align-items: center;
   }
-  .nav-links a {
-    color: var(--text-dim);
+  .nav-links a:not(.btn) {
+    color: var(--ink-dim);
     text-decoration: none;
     font-size: 0.92rem;
-    transition: color 0.15s;
+    font-weight: 400;
+    transition: color 0.2s;
+    position: relative;
   }
-  .nav-links a:hover { color: var(--text); }
+  .nav-links a:not(.btn):hover { color: var(--ink); }
+  .nav-links a:not(.btn)::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 0;
+    width: 0;
+    height: 1px;
+    background: var(--terracotta);
+    transition: width 0.25s;
+  }
+  .nav-links a:not(.btn):hover::after { width: 100%; }
 
-  /* ----- Hero ----- */
+  /* ============= BUTTONS ============= */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.85rem 1.6rem;
+    border-radius: 100px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    letter-spacing: -0.005em;
+  }
+  .btn-primary {
+    background: var(--ink);
+    color: var(--cream);
+  }
+  .btn-primary:hover {
+    background: var(--terracotta);
+    transform: translateY(-1px);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn-secondary:hover {
+    background: var(--cream-2);
+    border-color: var(--ink);
+  }
+  .btn-sm { padding: 0.6rem 1.1rem; font-size: 0.88rem; }
+  .btn .arrow { transition: transform 0.2s; font-size: 1.05em; }
+  .btn:hover .arrow { transform: translateX(4px); }
+
+  /* ============= HERO ============= */
   .hero {
     position: relative;
     z-index: 1;
-    max-width: 900px;
+    max-width: 980px;
     margin: 0 auto;
     padding: 4rem 1.5rem 5rem;
     text-align: center;
   }
-  .eyebrow {
-    display: inline-block;
-    background: rgba(74, 140, 255, 0.1);
-    border: 1px solid rgba(74, 140, 255, 0.25);
-    color: #8ab4ff;
-    font-size: 0.78rem;
-    padding: 0.4rem 0.9rem;
-    border-radius: 999px;
-    margin-bottom: 1.5rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-  }
+
   h1 {
-    font-size: clamp(2rem, 5vw, 3.4rem);
-    font-weight: 700;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    margin-bottom: 1.25rem;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(2.5rem, 6.5vw, 5.5rem);
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: -0.025em;
+    margin-bottom: 1.75rem;
+    animation: fadeInUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
   }
   h1 .accent {
-    background: linear-gradient(135deg, #4a8cff, #6dd9b1);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-style: italic;
+    color: var(--terracotta);
+  }
+  h1 .underline-accent {
+    position: relative;
+    display: inline-block;
+  }
+  h1 .underline-accent::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 0;
+    right: 0;
+    height: 8px;
+    background: var(--terracotta-soft);
+    z-index: -1;
+    transform: skewX(-3deg);
+  }
+  .hero-bridge {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+    color: var(--ink);
+    max-width: 640px;
+    margin: 0 auto 1.5rem;
+    line-height: 1.4;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    animation: fadeInUp 0.95s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  }
+  .hero-bridge em {
+    font-style: italic;
+    color: var(--terracotta);
   }
   .hero-sub {
-    font-size: clamp(1rem, 2vw, 1.2rem);
-    color: var(--text-dim);
-    max-width: 620px;
+    font-size: clamp(1.05rem, 1.8vw, 1.2rem);
+    color: var(--ink-dim);
+    max-width: 600px;
     margin: 0 auto 2.5rem;
+    line-height: 1.55;
+    animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
   }
   .cta-row {
     display: flex;
     gap: 0.75rem;
     justify-content: center;
     flex-wrap: wrap;
+    animation: fadeInUp 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
   }
-  .btn-primary, .btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.9rem 1.6rem;
-    border-radius: 8px;
-    font-size: 0.98rem;
-    font-weight: 500;
-    text-decoration: none;
-    cursor: pointer;
-    border: none;
-    font-family: inherit;
-    transition: all 0.15s;
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: white;
-    box-shadow: 0 4px 24px var(--accent-glow);
-  }
-  .btn-primary:hover {
-    background: var(--accent-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 32px var(--accent-glow);
-  }
-  .btn-secondary {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
-  .btn-secondary:hover {
-    background: var(--panel);
-    border-color: var(--text-faint);
+  @keyframes fadeInUp {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
   }
 
-  /* ----- Trust row ----- */
   .trust-row {
-    margin-top: 2.5rem;
-    color: var(--text-faint);
-    font-size: 0.85rem;
+    margin-top: 2.75rem;
+    color: var(--ink-faint);
+    font-size: 0.84rem;
     display: flex;
     justify-content: center;
-    gap: 2rem;
+    gap: 1.75rem;
     flex-wrap: wrap;
+    animation: fadeInUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
   }
   .trust-row span { display: flex; align-items: center; gap: 0.4rem; }
-  .check { color: var(--green); }
+  .check-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--sage);
+    flex-shrink: 0;
+  }
 
-  /* ----- Sections ----- */
+  /* ============= SECTIONS ============= */
   section {
     position: relative;
     z-index: 1;
     max-width: 1100px;
     margin: 0 auto;
-    padding: 5rem 1.5rem;
+    padding: 6rem 1.5rem;
   }
-  .section-label {
+  .section-eyebrow {
     text-align: center;
-    color: var(--accent);
-    font-size: 0.82rem;
-    font-weight: 600;
+    color: var(--terracotta);
+    font-size: 0.78rem;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 0.75rem;
+    letter-spacing: 0.16em;
+    margin-bottom: 1rem;
   }
   .section-title {
     text-align: center;
-    font-size: clamp(1.6rem, 3.5vw, 2.4rem);
-    font-weight: 700;
-    letter-spacing: -0.015em;
-    margin-bottom: 1rem;
-    line-height: 1.2;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(2rem, 4.2vw, 3.2rem);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.25rem;
+    line-height: 1.05;
+  }
+  .section-title em {
+    font-style: italic;
+    color: var(--terracotta);
   }
   .section-sub {
     text-align: center;
-    color: var(--text-dim);
+    color: var(--ink-dim);
     max-width: 620px;
-    margin: 0 auto 3rem;
+    margin: 0 auto 4rem;
     font-size: 1.05rem;
+    line-height: 1.6;
   }
 
-  /* ----- Problem grid ----- */
+  /* ============= PROBLEM CARDS ============= */
   .problem-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 1.5rem;
   }
   .problem-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 1.75rem;
-    transition: transform 0.2s, border-color 0.2s;
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 2rem;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
   }
   .problem-card:hover {
-    transform: translateY(-3px);
-    border-color: var(--accent);
+    transform: translateY(-4px);
+    border-color: var(--terracotta);
+    box-shadow: 0 12px 32px -16px rgba(200, 90, 62, 0.15);
   }
   .problem-icon {
-    width: 42px;
-    height: 42px;
-    background: rgba(74, 140, 255, 0.12);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1rem;
-    color: var(--accent);
-    font-size: 1.3rem;
-  }
-  .problem-card h3 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-  }
-  .problem-card p {
-    color: var(--text-dim);
-    font-size: 0.94rem;
-  }
-
-  /* ----- How it works ----- */
-  .steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 2rem;
-    counter-reset: step;
-  }
-  .step {
-    position: relative;
-    padding-top: 1rem;
-  }
-  .step-num {
-    counter-increment: step;
-    font-size: 3rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #4a8cff, #6dd9b1);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    line-height: 1;
-    margin-bottom: 0.75rem;
-    opacity: 0.9;
-  }
-  .step h3 {
-    font-size: 1.15rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-  }
-  .step p { color: var(--text-dim); font-size: 0.95rem; }
-
-  /* ----- Topics covered ----- */
-  .topics-section {
-    background: var(--bg-2);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    margin: 0;
-    padding: 5rem 1.5rem;
-  }
-  .topics-inner { max-width: 1100px; margin: 0 auto; }
-  .topics-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1rem;
-    margin-top: 2.5rem;
-  }
-  .topic-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.85rem;
-    padding: 0.85rem 0;
-  }
-  .topic-tick {
-    flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    background: rgba(45, 186, 135, 0.15);
-    color: var(--green);
+    width: 44px;
+    height: 44px;
+    background: var(--terracotta-soft);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.75rem;
-    margin-top: 2px;
+    margin-bottom: 1.25rem;
+    color: var(--terracotta-deep);
   }
-  .topic-text { font-size: 0.96rem; }
-  .topic-text strong { color: var(--text); display: block; margin-bottom: 0.15rem; }
-  .topic-text span { color: var(--text-dim); font-size: 0.88rem; }
+  .problem-icon svg { width: 20px; height: 20px; }
+  .problem-card h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin-bottom: 0.6rem;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .problem-card p {
+    color: var(--ink-dim);
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
 
-  /* ----- Outcome card ----- */
-  .outcome-card {
-    background: linear-gradient(135deg, var(--panel) 0%, var(--panel-2) 100%);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 2.5rem;
-    text-align: center;
-    max-width: 700px;
+  /* ============= HOW IT WORKS ============= */
+  .timeline {
+    position: relative;
+    max-width: 720px;
+    margin: 0 auto;
+    padding-left: 2.5rem;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 12px;
+    bottom: 12px;
+    width: 1px;
+    background: linear-gradient(180deg, var(--terracotta) 0%, var(--sage) 50%, var(--gold) 100%);
+    opacity: 0.4;
+  }
+  .timeline-step {
+    position: relative;
+    padding-bottom: 3rem;
+  }
+  .timeline-step:last-child { padding-bottom: 0; }
+  .timeline-step::before {
+    content: '';
+    position: absolute;
+    left: -2.5rem;
+    top: 8px;
+    width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    background: var(--cream);
+    border: 2px solid var(--terracotta);
+  }
+  .timeline-step:nth-child(2)::before { border-color: var(--sage); }
+  .timeline-step:nth-child(3)::before { border-color: var(--gold); }
+  .timeline-step::after {
+    content: '';
+    position: absolute;
+    left: calc(-2.5rem + 7px);
+    top: 15px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--terracotta);
+  }
+  .timeline-step:nth-child(2)::after { background: var(--sage); }
+  .timeline-step:nth-child(3)::after { background: var(--gold); }
+  .timeline-meta {
+    font-size: 0.78rem;
+    color: var(--terracotta);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+  .timeline-step:nth-child(2) .timeline-meta { color: var(--sage); }
+  .timeline-step:nth-child(3) .timeline-meta { color: var(--gold); }
+  .timeline-step h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.6rem;
+    font-weight: 500;
+    margin-bottom: 0.7rem;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .timeline-step p {
+    color: var(--ink-dim);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  /* ============= TOPICS ============= */
+  .topics-section {
+    background: var(--cream-2);
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    margin: 0;
+    padding: 6rem 1.5rem;
+  }
+  .topics-inner { max-width: 1100px; margin: 0 auto; }
+  .topic-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    max-width: 900px;
     margin: 0 auto;
   }
-  .outcome-card h3 {
-    font-size: 1.4rem;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
+  .topic-tile {
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.5rem 1.5rem 1.4rem;
+    transition: all 0.2s;
+    position: relative;
   }
-  .outcome-card p {
-    color: var(--text-dim);
-    margin-bottom: 1.75rem;
+  .topic-tile:hover {
+    border-color: var(--terracotta);
+    transform: translateY(-2px);
+  }
+  .topic-num {
+    position: absolute;
+    top: 1.1rem;
+    right: 1.4rem;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: 1rem;
+    color: var(--terracotta);
+    font-variant-numeric: tabular-nums;
+  }
+  .topic-tile h4 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .topic-tile p {
+    color: var(--ink-dim);
+    font-size: 0.88rem;
+    line-height: 1.55;
   }
 
-  /* ----- FAQ ----- */
+  /* ============= OUTCOME ============= */
+  .outcome-card {
+    background: var(--ink);
+    color: var(--cream);
+    border-radius: 24px;
+    padding: 3.5rem 3rem;
+    text-align: center;
+    max-width: 760px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+  }
+  .outcome-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 0%, rgba(200, 90, 62, 0.18), transparent 70%);
+    pointer-events: none;
+  }
+  .outcome-card > * { position: relative; z-index: 1; }
+  .outcome-card .timing-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: rgba(200, 90, 62, 0.18);
+    border: 1px solid rgba(200, 90, 62, 0.4);
+    color: #f5b8a3;
+    font-size: 0.78rem;
+    padding: 0.45rem 1rem;
+    border-radius: 100px;
+    margin-bottom: 1.75rem;
+    font-weight: 500;
+  }
+  .outcome-card h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 2rem;
+    font-weight: 400;
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .outcome-card h3 em {
+    font-style: italic;
+    color: #f5b8a3;
+  }
+  .outcome-list {
+    text-align: left;
+    max-width: 480px;
+    margin: 0 auto 2.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+  }
+  .outcome-item {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    color: rgba(251, 246, 236, 0.85);
+    font-size: 0.98rem;
+    line-height: 1.5;
+  }
+  .outcome-item svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--terracotta);
+  }
+  .outcome-card .btn-primary {
+    background: var(--cream);
+    color: var(--ink);
+  }
+  .outcome-card .btn-primary:hover {
+    background: var(--terracotta);
+    color: var(--cream);
+  }
+
+  /* ============= FAQ ============= */
+  .faq-list {
+    max-width: 740px;
+    margin: 0 auto;
+  }
   .faq-item {
-    border-bottom: 1px solid var(--border);
-    padding: 1.25rem 0;
-    cursor: pointer;
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    transition: all 0.2s;
   }
   .faq-q {
+    padding: 1.4rem 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 1.05rem;
+    font-size: 1.1rem;
     font-weight: 500;
+    cursor: pointer;
     user-select: none;
+    transition: color 0.2s;
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    color: var(--ink);
   }
-  .faq-q::after {
-    content: '+';
-    color: var(--accent);
-    font-size: 1.4rem;
+  .faq-q:hover { color: var(--terracotta); }
+  .faq-toggle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--cream-2);
+    color: var(--terracotta);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
     font-weight: 300;
-    transition: transform 0.2s;
+    transition: transform 0.25s, background 0.2s;
+    flex-shrink: 0;
+    margin-left: 1rem;
   }
-  .faq-item.open .faq-q::after {
-    content: '−';
-    transform: rotate(0deg);
+  .faq-item.open .faq-toggle {
+    transform: rotate(45deg);
+    background: var(--terracotta);
+    color: var(--cream);
   }
   .faq-a {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.25s ease, margin-top 0.25s ease;
-    color: var(--text-dim);
+    transition: max-height 0.3s ease;
+    color: var(--ink-dim);
+    line-height: 1.65;
   }
   .faq-item.open .faq-a {
-    max-height: 200px;
-    margin-top: 0.75rem;
+    max-height: 280px;
+    padding: 0 0 1.4rem;
   }
 
-  /* ----- Final CTA ----- */
+  /* ============= PRICING ============= */
+  .pricing-section {
+    background: var(--cream-2);
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    margin: 0;
+    padding: 6rem 1.5rem;
+    max-width: none;
+  }
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .price-card {
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 2.25rem;
+    position: relative;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+  }
+  .price-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--terracotta);
+  }
+  .price-card-paid {
+    background: var(--ink);
+    color: var(--cream);
+    border-color: var(--ink);
+  }
+  .price-card-paid:hover {
+    border-color: var(--terracotta);
+  }
+  .price-card-badge {
+    position: absolute;
+    top: -12px;
+    right: 1.5rem;
+    background: var(--terracotta);
+    color: var(--cream);
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.35rem 0.85rem;
+    border-radius: 100px;
+    letter-spacing: 0.02em;
+  }
+  .price-card-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .price-card-paid .price-card-header {
+    border-bottom-color: rgba(251, 246, 236, 0.15);
+  }
+  .price-tag-label {
+    font-size: 0.85rem;
+    color: var(--ink-dim);
+    margin: 0 0 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+  }
+  .price-card-paid .price-tag-label {
+    color: rgba(251, 246, 236, 0.7);
+  }
+  .price-tag {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    font-family: 'Fraunces', Georgia, serif;
+  }
+  .price-tag-currency {
+    font-size: 1.6rem;
+    font-weight: 400;
+    color: var(--ink);
+  }
+  .price-card-paid .price-tag-currency { color: var(--cream); }
+  .price-tag-amount {
+    font-size: 2.6rem;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: -0.025em;
+    line-height: 1;
+  }
+  .price-card-paid .price-tag-amount { color: var(--cream); }
+  .price-card-free .price-tag-amount {
+    color: var(--sage);
+    font-size: 3.2rem;
+  }
+  .price-tag-suffix {
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+    margin-left: 0.4rem;
+    font-style: italic;
+    font-family: 'Fraunces', Georgia, serif;
+  }
+  .price-card-paid .price-tag-suffix {
+    color: rgba(251, 246, 236, 0.55);
+  }
+  .price-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.5rem;
+    flex: 1;
+  }
+  .price-features li {
+    padding: 0.55rem 0 0.55rem 1.5rem;
+    position: relative;
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .price-card-paid .price-features li {
+    color: rgba(251, 246, 236, 0.85);
+  }
+  .price-features li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.95rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--terracotta);
+  }
+  .price-card-free .price-features li::before { background: var(--sage); }
+  .price-card-footnote {
+    font-size: 0.85rem;
+    color: rgba(251, 246, 236, 0.6);
+    line-height: 1.55;
+    margin: 0;
+    font-style: italic;
+    font-family: 'Fraunces', Georgia, serif;
+  }
+  .price-card-footnote em {
+    color: var(--terracotta);
+    font-style: italic;
+    font-weight: 500;
+  }
+
+  /* ============= FINAL CTA ============= */
   .final-cta {
     text-align: center;
-    padding: 6rem 1.5rem;
-    background: radial-gradient(ellipse at center top, var(--accent-glow), transparent 60%);
+    padding: 8rem 1.5rem;
+    background:
+      radial-gradient(ellipse 50% 70% at 50% 50%, rgba(200, 90, 62, 0.1), transparent 70%);
+    position: relative;
   }
   .final-cta h2 {
-    font-size: clamp(1.8rem, 4vw, 2.6rem);
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 1rem;
-    line-height: 1.2;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(2.2rem, 5vw, 3.8rem);
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    margin-bottom: 1.25rem;
+    line-height: 1.05;
+  }
+  .final-cta h2 em {
+    font-style: italic;
+    color: var(--terracotta);
   }
   .final-cta p {
-    color: var(--text-dim);
-    font-size: 1.1rem;
+    color: var(--ink-dim);
+    font-size: 1.15rem;
     max-width: 560px;
-    margin: 0 auto 2rem;
+    margin: 0 auto 2.5rem;
+    line-height: 1.55;
   }
 
-  /* ----- Footer ----- */
+  /* ============= FOOTER ============= */
   footer {
-    border-top: 1px solid var(--border);
-    padding: 2rem 1.5rem;
+    border-top: 1px solid var(--line);
+    padding: 2.5rem 1.5rem;
     text-align: center;
-    color: var(--text-faint);
+    color: var(--ink-faint);
     font-size: 0.85rem;
+    position: relative;
+    z-index: 1;
   }
 
-  /* ----- Mobile ----- */
-  @media (max-width: 600px) {
-    nav { padding: 1.25rem 1.25rem; }
-    .nav-links { gap: 1rem; }
-    .nav-links a:not(.btn-primary) { display: none; }
-    .hero { padding: 2.5rem 1.25rem 3.5rem; }
-    section { padding: 3.5rem 1.25rem; }
-    .topics-section { padding: 3.5rem 1.25rem; }
+  /* ============= MOBILE ============= */
+  @media (max-width: 768px) {
+    nav { padding: 1.25rem; }
+    .nav-links { gap: 1.25rem; }
+    .nav-links a:not(.btn) { display: none; }
+    .hero { padding: 2rem 1.25rem 3.5rem; }
+    section { padding: 4rem 1.25rem; }
+    .topics-section { padding: 4rem 1.25rem; }
+    .outcome-card { padding: 2.5rem 1.5rem; }
+    .timeline { padding-left: 2rem; }
+    .timeline::before { left: 9px; }
+    .timeline-step::before { left: -2rem; }
+    .timeline-step::after { left: calc(-2rem + 7px); }
   }
 </style>
 </head>
 <body>
 
-<div class="bg-glow"></div>
-
 <nav>
   <a href="#" class="logo">
-    <span class="logo-dot"></span>
-    <span>AI Discovery</span>
+    <span class="logo-mark">
+      <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="13" fill="#1a2332"/>
+        <path d="M9 17 L14 9 L19 17" stroke="#fbf6ec" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14" cy="14" r="2" fill="#c85a3e"/>
+      </svg>
+    </span>
+    <span>AI Growth Catalyst</span>
   </a>
   <div class="nav-links">
     <a href="#how">How it works</a>
+    <a href="#pricing">Pricing</a>
     <a href="#topics">What we cover</a>
     <a href="#faq">FAQ</a>
-    <a href="call/" class="btn-primary" style="padding: 0.55rem 1.1rem; font-size: 0.88rem;">Start a call</a>
+    <a href="call/" class="btn btn-primary btn-sm">Start a call <span class="arrow">→</span></a>
   </div>
 </nav>
 
 <!-- ============= HERO ============= -->
 <header class="hero">
-  <span class="eyebrow">For small and medium-sized businesses</span>
   <h1>
-    Find out where <span class="accent">AI can actually help</span> your business.
+    An assessment of where you can <span class="accent">leverage AI</span> &amp; <span class="accent">implement</span> into your business.
   </h1>
+  <p class="hero-bridge">
+    You know the <em>bottlenecks</em>. You know the <em>inefficiencies</em>. You know the tasks eating your team's time. You know AI could resolve it — you're just not sure where to start.
+  </p>
   <p class="hero-sub">
-    A free 15-minute AI-led discovery call. We listen, you talk. By the end, you'll have a clear picture of which parts of your business are ripe for automation — and which aren't.
+    A focused 15-minute conversation. We listen carefully — you do the talking. If the call shows AI could genuinely help, we'll send you a tailored quote (typically £250&ndash;£500) for a bespoke roadmap, delivered within 48 hours of acceptance.
   </p>
   <div class="cta-row">
-    <a href="call/" class="btn-primary">Start your free discovery call →</a>
-    <a href="#how" class="btn-secondary">How it works</a>
+    <a href="call/" class="btn btn-primary">Start your free call <span class="arrow">→</span></a>
+    <a href="#how" class="btn btn-secondary">How it works</a>
   </div>
   <div class="trust-row">
-    <span><span class="check">✓</span> Takes about 15 minutes</span>
-    <span><span class="check">✓</span> No sales pitch</span>
-    <span><span class="check">✓</span> Written summary emailed to you</span>
+    <span><svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 8.5L7 12L13 4" stroke-linecap="round" stroke-linejoin="round"/></svg> Free 15-min call</span>
+    <span><svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 8.5L7 12L13 4" stroke-linecap="round" stroke-linejoin="round"/></svg> No sales pitch on the call</span>
+    <span><svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 8.5L7 12L13 4" stroke-linecap="round" stroke-linejoin="round"/></svg> Quote sent within 24 hours</span>
   </div>
 </header>
 
 <!-- ============= PROBLEM ============= -->
 <section>
-  <p class="section-label">The challenge</p>
-  <h2 class="section-title">AI is moving fast. Most businesses are stuck wondering where to start.</h2>
+  <p class="section-eyebrow">The challenge</p>
+  <h2 class="section-title">Three things <em>almost every</em> SMB owner says.</h2>
   <p class="section-sub">
-    The hype is everywhere. But translating "AI is going to change everything" into "here's what we should do on Monday" is genuinely hard — especially when you're already running a busy business.
+    The hype says AI will transform your business. The reality is most owners can't tell where to start. We hear the same patterns again and again.
   </p>
   <div class="problem-grid">
     <div class="problem-card">
-      <div class="problem-icon">⏱</div>
-      <h3>Drowning in repetitive work</h3>
-      <p>Quoting, invoicing, follow-ups, chasing payments, answering the same questions — hours every week that should be automated.</p>
+      <div class="problem-icon">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>
+      </div>
+      <h3>"We're drowning in repetitive work."</h3>
+      <p>Quoting, invoicing, follow-ups, chasing payments, answering the same questions ten times a week. Hours every week that should be automated but aren't.</p>
     </div>
     <div class="problem-card">
-      <div class="problem-icon">🧩</div>
-      <h3>Tools that don't talk to each other</h3>
-      <p>Your CRM doesn't know about your accounting. Your email doesn't link to your project tool. Data lives in spreadsheets and people's heads.</p>
+      <div class="problem-icon">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </div>
+      <h3>"Our tools don't talk to each other."</h3>
+      <p>The CRM doesn't know about the accounting. The email doesn't link to the project tool. Data lives in spreadsheets, sticky notes, and people's heads.</p>
     </div>
     <div class="problem-card">
-      <div class="problem-icon">🤔</div>
-      <h3>Not sure what's actually possible</h3>
-      <p>Every vendor claims their AI will change your life. Cutting through the noise to find what would genuinely help your specific business is a full-time job.</p>
+      <div class="problem-icon">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-.5.5-1.5 1-1.5 2v.5" stroke-linecap="round"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>
+      </div>
+      <h3>"We don't know what's actually possible."</h3>
+      <p>Every vendor claims their AI will transform you. Cutting through the noise to find what would genuinely help your specific business is a full-time job in itself.</p>
     </div>
   </div>
 </section>
 
 <!-- ============= HOW IT WORKS ============= -->
 <section id="how">
-  <p class="section-label">How it works</p>
-  <h2 class="section-title">A focused conversation, not a pitch.</h2>
+  <p class="section-eyebrow">How it works</p>
+  <h2 class="section-title">A focused conversation,<br/><em>not</em> a pitch.</h2>
   <p class="section-sub">
-    The AI agent does what a good consultant would do on a first call: ask, listen, dig in. It doesn't recommend anything. That comes later, after we've understood the full picture.
+    The agent does what a thoughtful consultant would do on a first call: ask, listen, dig in. It never recommends anything during the call — that comes after, in writing.
   </p>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">01</div>
+  <div class="timeline">
+    <div class="timeline-step">
+      <div class="timeline-meta">Step 01 · Right now</div>
       <h3>You start the call</h3>
-      <p>Click the button. Allow your microphone. Enter your name and business. The agent introduces itself and starts asking.</p>
+      <p>Click below, allow your microphone, enter your name and business. The agent introduces itself and starts asking. About 15 minutes total.</p>
     </div>
-    <div class="step">
-      <div class="step-num">02</div>
-      <h3>The agent asks. You talk.</h3>
-      <p>Seven topics, naturally connected. Real follow-ups based on what you say. About 15 minutes of focused conversation.</p>
+    <div class="timeline-step">
+      <div class="timeline-meta">Step 02 · During the call</div>
+      <h3>The agent listens. You think out loud.</h3>
+      <p>Seven topics — your business, your tools, the manual work eating your time, the pain points keeping you up at night. Real follow-ups, adapting to what you say. The agent will gently prompt you to think about which tasks could be done by a computer — but it never tells you the answer.</p>
     </div>
-    <div class="step">
-      <div class="step-num">03</div>
-      <h3>You get a summary</h3>
-      <p>A written breakdown of your systems, pain points, and priorities lands in your inbox. Yours to keep, share, or use however you like.</p>
+    <div class="timeline-step">
+      <div class="timeline-meta">Step 03 · After the call</div>
+      <h3>You receive a tailored quote</h3>
+      <p>If your call shows AI could genuinely help your business, we'll send a quote within 24 hours — typically £250&ndash;£500 depending on your business size and complexity. If you accept, a human consultant writes your bespoke roadmap and delivers it within 48 hours.</p>
     </div>
   </div>
 </section>
 
-<!-- ============= TOPICS COVERED ============= -->
+<!-- ============= TOPICS ============= -->
 <section id="topics" class="topics-section">
   <div class="topics-inner">
-    <p class="section-label">What we cover</p>
-    <h2 class="section-title">Seven topics. Twelve to fifteen minutes.</h2>
+    <p class="section-eyebrow">What we cover</p>
+    <h2 class="section-title">Seven topics. <em>Twelve</em> to fifteen minutes.</h2>
     <p class="section-sub">
       The agent adapts as you talk — but here's the structure of every call.
     </p>
-    <div class="topics-list">
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Business overview</strong><span>What you do, who your customers are, team size</span></div>
+    <div class="topic-grid">
+      <div class="topic-tile">
+        <span class="topic-num">i</span>
+        <h4>Business overview</h4>
+        <p>What you do, who your customers are, team size</p>
       </div>
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Daily operations</strong><span>How a typical day or week looks across the team</span></div>
+      <div class="topic-tile">
+        <span class="topic-num">ii</span>
+        <h4>Daily operations</h4>
+        <p>How a typical day or week looks across the team</p>
       </div>
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Systems &amp; tools</strong><span>What software you use and where the gaps are</span></div>
+      <div class="topic-tile">
+        <span class="topic-num">iii</span>
+        <h4>Systems &amp; tools</h4>
+        <p>What software you use and where the gaps are</p>
       </div>
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Manual &amp; repetitive work</strong><span>The tasks eating up time that shouldn't be</span></div>
+      <div class="topic-tile">
+        <span class="topic-num">iv</span>
+        <h4>Manual work</h4>
+        <p>The tasks eating up time that shouldn't be</p>
       </div>
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Pain points</strong><span>The things that genuinely slow you down or stress you out</span></div>
+      <div class="topic-tile">
+        <span class="topic-num">v</span>
+        <h4>Pain points</h4>
+        <p>What genuinely slows you down or stresses you out</p>
       </div>
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Customer interactions</strong><span>How you handle inquiries, support, and follow-ups</span></div>
+      <div class="topic-tile">
+        <span class="topic-num">vi</span>
+        <h4>Customer interactions</h4>
+        <p>How you handle inquiries, support, and follow-ups</p>
       </div>
-      <div class="topic-row">
-        <div class="topic-tick">✓</div>
-        <div class="topic-text"><strong>Priorities &amp; goals</strong><span>The one thing you'd automate tomorrow if you could</span></div>
+      <div class="topic-tile">
+        <span class="topic-num">vii</span>
+        <h4>Priorities &amp; goals</h4>
+        <p>The one thing you'd automate tomorrow if you could</p>
       </div>
     </div>
   </div>
@@ -547,65 +937,138 @@
 
 <!-- ============= OUTCOME ============= -->
 <section>
-  <p class="section-label">The outcome</p>
-  <h2 class="section-title">A clear, written summary you can act on.</h2>
+  <p class="section-eyebrow">The outcome</p>
+  <h2 class="section-title">Honest. Specific. <em>Yours</em>.</h2>
   <p class="section-sub">
-    No fluff, no recommendations dressed up as advice. Just an honest map of your business as we heard it.
+    No fluff, no salesy recommendations dressed up as advice. Just an honest map of your business and where AI could genuinely help.
   </p>
   <div class="outcome-card">
-    <h3>You'll walk away with:</h3>
-    <p style="text-align: left; max-width: 480px; margin: 0 auto 1.5rem;">
-      • A structured breakdown of your current systems<br />
-      • A prioritised list of pain points and time-drains<br />
-      • A clear view of what's automatable today vs. tomorrow<br />
-      • Direct quotes from the call captured verbatim<br />
-      • Your full transcript, yours to keep
-    </p>
-    <a href="call/" class="btn-primary">Start your free call →</a>
+    <div class="timing-badge">
+      <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--terracotta);"></span>
+      Quote within 24 hours · Roadmap within 48 hours of acceptance
+    </div>
+    <h3>If you commission the roadmap, you'll receive:</h3>
+    <div class="outcome-list">
+      <div class="outcome-item">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>A structured breakdown of your current systems and how they fit together</span>
+      </div>
+      <div class="outcome-item">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>A prioritised list of pain points and the time-drains we identified</span>
+      </div>
+      <div class="outcome-item">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>A concrete view of what's automatable today, what needs more thought, and what shouldn't be touched</span>
+      </div>
+      <div class="outcome-item">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>A clear starting point — the single most valuable thing to tackle first</span>
+      </div>
+      <div class="outcome-item">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Your full transcript with direct quotes captured verbatim</span>
+      </div>
+    </div>
+    <a href="call/" class="btn btn-primary">Start your free call <span class="arrow">→</span></a>
+  </div>
+</section>
+
+<!-- ============= PRICING ============= -->
+<section id="pricing" class="pricing-section">
+  <p class="section-eyebrow">Pricing</p>
+  <h2 class="section-title">Honest, <em>upfront</em> pricing.</h2>
+  <p class="section-sub">No surprises. The discovery call is free. If the call shows AI could genuinely help, we'll send you a tailored quote — typically £250&ndash;£500 depending on business size and complexity.</p>
+
+  <div class="pricing-grid">
+    <div class="price-card price-card-free">
+      <div class="price-card-header">
+        <p class="price-tag-label">The discovery call</p>
+        <div class="price-tag">
+          <span class="price-tag-amount">Free</span>
+        </div>
+      </div>
+      <ul class="price-features">
+        <li>15-minute AI-led conversation</li>
+        <li>Adaptive questions based on your answers</li>
+        <li>Full transcript saved to your inbox</li>
+        <li>Acknowledgement email when complete</li>
+        <li>No obligation to proceed further</li>
+      </ul>
+      <a href="call/" class="btn btn-secondary">Start the free call <span class="arrow">→</span></a>
+    </div>
+
+    <div class="price-card price-card-paid">
+      <div class="price-card-badge">Optional next step</div>
+      <div class="price-card-header">
+        <p class="price-tag-label">The bespoke roadmap</p>
+        <div class="price-tag">
+          <span class="price-tag-currency">£</span>
+          <span class="price-tag-amount">250&ndash;500</span>
+          <span class="price-tag-suffix">per quote</span>
+        </div>
+      </div>
+      <ul class="price-features">
+        <li>Human consultant reviews your transcript</li>
+        <li>Bespoke document tailored to your business</li>
+        <li>Clear breakdown of where AI fits — and where it doesn't</li>
+        <li>Prioritised list with a single recommended starting point</li>
+        <li>Delivered within 48 hours of payment</li>
+      </ul>
+      <p class="price-card-footnote">After the call, we'll send a tailored quote based on your specific business. Typical range: <em>£250&ndash;£500</em>. No obligation to proceed.</p>
+    </div>
   </div>
 </section>
 
 <!-- ============= FAQ ============= -->
 <section id="faq">
-  <p class="section-label">FAQ</p>
-  <h2 class="section-title">Common questions</h2>
-  <div style="max-width: 720px; margin: 2.5rem auto 0;">
+  <p class="section-eyebrow">FAQ</p>
+  <h2 class="section-title">Common <em>questions</em></h2>
+  <div class="faq-list" style="margin-top: 2rem;">
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q">Is this really free?</div>
-      <div class="faq-a">Yes. The discovery call and written summary cost you nothing. We'd rather have a clear picture of your business before we ever talk about what comes next — and frankly, most calls don't lead anywhere, and that's fine.</div>
+      <div class="faq-q">Is the call really free?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">Yes — completely free, with no obligation to proceed. If the call shows AI could genuinely help, we'll send a tailored quote (typically £250&ndash;£500) for the bespoke roadmap. We're transparent about pricing upfront so you can decide before you start. Most calls don't lead to a paid roadmap, and that's completely fine.</div>
     </div>
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q">Will the AI try to sell me something?</div>
-      <div class="faq-a">No. The agent is explicitly built not to recommend anything during the call. It only listens and asks. Any follow-up — if there is one — happens in a separate conversation with a human.</div>
+      <div class="faq-q">Why does the roadmap price vary?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">The roadmap is bespoke — it depends on the size and complexity of your business, the number of systems involved, and the depth of analysis your situation calls for. A solo consultant might receive a £250 quote; a 50-person services firm with five tools and complex workflows might be £450. We'll always explain the price in the quote so you can decide.</div>
     </div>
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q">How long does it take?</div>
-      <div class="faq-a">Twelve to fifteen minutes typically. If you have a lot to share, it can stretch to twenty. You can end the call at any point and you'll still get a summary of what was covered.</div>
+      <div class="faq-q">What does the price actually cover?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">A human consultant reviewing your full transcript, identifying where AI could genuinely help your business, and writing a tailored roadmap with a clear starting point. It's the same kind of analysis a consultancy would charge several thousand for — we keep it focused, useful, and affordable for SMBs.</div>
     </div>
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q">What happens to my information?</div>
-      <div class="faq-a">The transcript is stored privately and used only to produce your summary. It is not shared, sold, or used to train any AI model. You can request deletion at any time.</div>
+      <div class="faq-q">Will the AI try to sell me something?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">No. The agent is explicitly built not to recommend anything during the call. It only listens, asks, and gently prompts you to think about which tasks could potentially be automated — without telling you the answer. Recommendations come later, in writing, after a human has reviewed your transcript.</div>
     </div>
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q">What if I don't have time right now?</div>
-      <div class="faq-a">No problem — just bookmark this page and come back when you do. The link doesn't expire and the call can be done from any device with a microphone.</div>
+      <div class="faq-q">When do I get my roadmap?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">Within 48 hours of the call ending. You'll get a brief acknowledgement email immediately after the call, and the full bespoke roadmap follows shortly after — usually next business day.</div>
     </div>
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q">Does this work on my phone?</div>
-      <div class="faq-a">Best on a laptop or desktop using Chrome or Edge. Mobile works but speech recognition is more reliable on desktop browsers.</div>
+      <div class="faq-q">How long does the call take?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">Twelve to fifteen minutes typically. If you have a lot to share, it can stretch to twenty. You can end the call at any point and we'll still produce your roadmap based on what was covered.</div>
+    </div>
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">What happens to my information?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">Your transcript is stored privately and used only to produce your roadmap. It's never shared, sold, or used to train any AI model. You can request deletion at any time by replying to the roadmap email.</div>
+    </div>
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">Does this work on my phone?<span class="faq-toggle">+</span></div>
+      <div class="faq-a">Best on a laptop or desktop using Chrome or Edge. Mobile works but speech recognition is more reliable on desktop browsers. There's also a text fallback if the microphone gives you trouble.</div>
     </div>
   </div>
 </section>
 
 <!-- ============= FINAL CTA ============= -->
 <section class="final-cta">
-  <h2>Ready to see where AI can actually help?</h2>
-  <p>Fifteen minutes. No sales pitch. A useful summary, yours to keep.</p>
-  <a href="call/" class="btn-primary">Start your free discovery call →</a>
+  <h2>Ready to find <em>where</em><br/>AI fits your business?</h2>
+  <p>Start with the free 15-minute call. If it shows a clear fit, we'll send a tailored quote within 24 hours.</p>
+  <a href="call/" class="btn btn-primary" style="font-size: 1.05rem; padding: 1rem 2rem;">Start your free call <span class="arrow">→</span></a>
 </section>
 
 <footer>
-  <p>© <span id="year"></span> AI Discovery. Built for small and medium-sized businesses navigating a fast-changing landscape.</p>
+  <p>© <span id="year"></span> AI Growth Catalyst · Helping small and medium-sized businesses navigate AI without the hype.</p>
 </footer>
 
 <script>
