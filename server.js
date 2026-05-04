@@ -82,7 +82,7 @@ Respond ONLY with valid JSON, no markdown fences:
   "notableQuotes": ["3-5 direct verbatim quotes"],
   "suggestedFirstFocus": "your single best guess at where the consultant should focus the roadmap",
   "fitAssessment": "Brief: strong fit / moderate fit / weak fit / no clear fit, with one sentence reasoning",
-  "suggestedQuotePrice": "Best guess at appropriate quote: '£250', '£350', '£450' or 'No quote — not a fit'. Base it on business size, complexity, and clarity of the opportunity."
+  "shouldOfferRoadmap": "YES or NO — should we offer the £350 roadmap to this client? Say NO if there's no clear AI fit, the business is too small/early-stage to benefit, or there are significant red flags. One sentence reason."
 }`;
 
 // ============================================================
@@ -222,14 +222,15 @@ function buildInternalNotesDocx(notes, meta) {
     new TextRun({ text: durationStr, size: 22, color: '374151' })
   ]}));
 
-  // Quote suggestion at top — actionable for you
-  if (notes.suggestedQuotePrice) {
-    children.push(heading('Suggested Quote Price'));
+  // Offer recommendation at top — actionable for you
+  if (notes.shouldOfferRoadmap) {
+    children.push(heading('Should We Offer the £350 Roadmap?'));
+    const isYes = notes.shouldOfferRoadmap.toUpperCase().startsWith('YES');
     children.push(new Paragraph({
       spacing: { after: 240 },
       indent: { left: 360 },
-      border: { left: { style: BorderStyle.SINGLE, size: 16, color: 'C85A3E', space: 8 } },
-      children: [new TextRun({ text: notes.suggestedQuotePrice, italics: false, size: 28, color: 'A3432B', bold: true })]
+      border: { left: { style: BorderStyle.SINGLE, size: 16, color: isYes ? '6B8268' : 'B8843A', space: 8 } },
+      children: [new TextRun({ text: notes.shouldOfferRoadmap, italics: false, size: 24, color: isYes ? '3C4D3A' : '7A5825', bold: true })]
     }));
   }
   if (notes.fitAssessment) {
@@ -309,7 +310,7 @@ async function sendClientAcknowledgement(toEmail, clientName, businessName) {
       </p>
       <div style="background: #fbf6ec; border: 1px solid #e8dec5; border-radius: 12px; padding: 24px; margin: 24px 0;">
         <p style="font-size: 16px; margin: 0 0 12px; color: #1a2332;"><strong>What happens now</strong></p>
-        <p style="font-size: 14px; margin: 0 0 12px; color: #5d6b80; line-height: 1.6;">If we identify a clear opportunity for AI in your business, we'll send you a tailored quote within 24 hours — typically £250&ndash;£500 depending on the depth of analysis your situation calls for.</p>
+        <p style="font-size: 14px; margin: 0 0 12px; color: #5d6b80; line-height: 1.6;">If we identify a clear opportunity for AI in your business, we'll be in touch within 24 hours about the bespoke roadmap (£350, fixed fee, delivered within 48 hours).</p>
         <p style="font-size: 14px; margin: 0; color: #5d6b80; line-height: 1.6;">If we don't see a clear fit, we'll tell you that honestly. Either way, no follow-up sales pressure.</p>
       </div>
       <p style="font-size: 15px; margin-bottom: 16px;">
@@ -343,12 +344,12 @@ async function sendClientAcknowledgement(toEmail, clientName, businessName) {
 }
 
 // ============================================================
-async function sendInternalNotes(clientName, businessName, clientEmail, docBuffer, suggestedQuote) {
+async function sendInternalNotes(clientName, businessName, clientEmail, docBuffer, shouldOffer) {
   if (!RESEND_API_KEY || !BCC_EMAIL) return { skipped: true };
   const filename = 'discovery-notes-' +
     (businessName || 'call').replace(/[^a-z0-9]+/gi, '-').toLowerCase() +
     '-' + new Date().toISOString().slice(0, 10) + '.docx';
-  const quoteHint = suggestedQuote ? `<p><strong>Suggested quote:</strong> ${suggestedQuote}</p>` : '';
+  const offerHint = shouldOffer ? `<p><strong>Offer £350 roadmap?</strong> ${shouldOffer}</p>` : '';
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
@@ -356,7 +357,7 @@ async function sendInternalNotes(clientName, businessName, clientEmail, docBuffe
       from: FROM_EMAIL,
       to: [BCC_EMAIL],
       subject: '[Internal] New discovery call: ' + businessName + ' (' + clientName + ')',
-      html: `<div style="font-family: -apple-system, sans-serif;"><p>New discovery call completed. Action: review notes, send quote within 24 hours if appropriate.</p><p><strong>Client:</strong> ${clientName}<br/><strong>Business:</strong> ${businessName}<br/><strong>Email:</strong> ${clientEmail}</p>${quoteHint}<p>Full notes attached.</p></div>`,
+      html: `<div style="font-family: -apple-system, sans-serif;"><p>New discovery call completed. Action: review notes, decide whether to offer the £350 roadmap within 24 hours.</p><p><strong>Client:</strong> ${clientName}<br/><strong>Business:</strong> ${businessName}<br/><strong>Email:</strong> ${clientEmail}</p>${offerHint}<p>Full notes attached.</p></div>`,
       attachments: [{ filename, content: docBuffer.toString('base64') }]
     })
   });
@@ -432,7 +433,7 @@ app.post('/api/save-transcript', async (req, res) => {
         dateStr: new Date(startTime || Date.now()).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' }),
         durationStr: Math.floor(durationSeconds / 60) + ' min ' + (durationSeconds % 60) + ' sec'
       });
-      const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.suggestedQuotePrice);
+      const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.shouldOfferRoadmap);
       internalEmailed = !internalResult.skipped;
     } catch (err) {
       console.error('Internal notes/email error', err);
