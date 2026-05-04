@@ -727,6 +727,153 @@
     font-weight: 500;
   }
 
+  /* ============= CASE STUDY ============= */
+  .case-study-card {
+    background: var(--cream);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 3rem;
+    max-width: 820px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+  }
+  .case-study-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--terracotta), var(--gold));
+  }
+  .case-study-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1.5rem;
+    padding-bottom: 2rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .case-study-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .case-study-meta-label {
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 500;
+  }
+  .case-study-meta-value {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.05rem;
+    color: var(--ink);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .case-study-section {
+    margin-bottom: 2rem;
+  }
+  .case-study-section:last-of-type {
+    margin-bottom: 1.5rem;
+  }
+  .case-study-heading {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: var(--terracotta);
+    letter-spacing: -0.015em;
+    margin-bottom: 0.75rem;
+  }
+  .case-study-section p {
+    color: var(--ink-soft);
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+  .case-study-pains {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .case-study-pains li {
+    color: var(--ink-soft);
+    font-size: 1rem;
+    line-height: 1.6;
+    padding-left: 1.75rem;
+    position: relative;
+  }
+  .case-study-pains li::before {
+    content: '×';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--terracotta-soft);
+    color: var(--terracotta-deep);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    margin-top: 4px;
+  }
+  .case-study-pains li strong {
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .case-study-results {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .case-study-results li {
+    color: var(--ink-soft);
+    font-size: 1rem;
+    line-height: 1.6;
+    padding-left: 1.5rem;
+    position: relative;
+  }
+  .case-study-results li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.65rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--terracotta);
+  }
+  .case-study-result-stat {
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    color: var(--terracotta-deep);
+    font-weight: 500;
+    margin-right: 0.3rem;
+  }
+  .case-study-footnote {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-size: 0.95rem;
+    color: var(--ink-dim);
+    line-height: 1.6;
+  }
+
   /* ============= FINAL CTA ============= */
   .final-cta {
     text-align: center;
@@ -798,7 +945,7 @@
   <div class="nav-links">
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
-    <a href="#topics">What we cover</a>
+    <a href="#case-study">Recent work</a>
     <a href="#faq">FAQ</a>
     <a href="call/" class="btn btn-primary btn-sm">Start a call <span class="arrow">→</span></a>
   </div>
@@ -1014,6 +1161,62 @@
       </ul>
       <p class="price-card-footnote">Only commissioned <em>after</em> the call, if you choose. Fixed fee — no quote process, no haggling.</p>
     </div>
+  </div>
+</section>
+
+<!-- ============= CASE STUDY ============= -->
+<section id="case-study">
+  <p class="section-eyebrow">Recent work</p>
+  <h2 class="section-title">A <em>WhatsApp ordering bot</em> for a meat delivery business.</h2>
+  <p class="section-sub">A real example of what an AI roadmap looks like once it's built. Names withheld for client confidentiality.</p>
+
+  <div class="case-study-card">
+    <div class="case-study-meta">
+      <div class="case-study-meta-item">
+        <span class="case-study-meta-label">Industry</span>
+        <span class="case-study-meta-value">Food &amp; delivery</span>
+      </div>
+      <div class="case-study-meta-item">
+        <span class="case-study-meta-label">Build time</span>
+        <span class="case-study-meta-value">~1 week</span>
+      </div>
+      <div class="case-study-meta-item">
+        <span class="case-study-meta-label">Stack</span>
+        <span class="case-study-meta-value">WhatsApp · AI · automation</span>
+      </div>
+    </div>
+
+    <div class="case-study-section">
+      <h3 class="case-study-heading">The problem</h3>
+      <p>The owner came to us with a familiar list of operational frustrations:</p>
+      <ul class="case-study-pains">
+        <li><strong>No clear tracking of orders</strong></li>
+        <li><strong>Invoices written manually</strong></li>
+        <li><strong>Manual order processing</strong></li>
+        <li><strong>No visibility on performance</strong></li>
+        <li><strong>Stock-outs and overstocking</strong></li>
+        <li><strong>The whole system depended on the owner</strong></li>
+      </ul>
+    </div>
+
+    <div class="case-study-section">
+      <h3 class="case-study-heading">What we built</h3>
+      <p>An AI-powered WhatsApp ordering bot that customers chat with directly to place orders. The bot understands natural language, confirms orders, and generates professional invoices automatically — all within seconds. A lightweight back end captures every order in real time, and a live dashboard gives the owner a clear view of business performance at any moment.</p>
+    </div>
+
+    <div class="case-study-section">
+      <h3 class="case-study-heading">The outcome</h3>
+      <ul class="case-study-results">
+        <li><span class="case-study-result-stat">Every order</span> tracked automatically — nothing lost, nothing forgotten</li>
+        <li><span class="case-study-result-stat">Instant</span> professional invoices generated and stored automatically</li>
+        <li><span class="case-study-result-stat">Hands-off</span> order processing — the bot handles clarification and confirmation</li>
+        <li><span class="case-study-result-stat">Live dashboard</span> showing revenue, top products, and order volume at a glance</li>
+        <li><span class="case-study-result-stat">Smarter buying</span> with visibility into what's actually selling</li>
+        <li><span class="case-study-result-stat">Owner freed up</span> to focus on the business instead of running the admin</li>
+      </ul>
+    </div>
+
+    <p class="case-study-footnote">This is the kind of practical, focused automation a bespoke roadmap identifies — solving a specific pain point with the right tools, at a cost the business can justify.</p>
   </div>
 </section>
 
