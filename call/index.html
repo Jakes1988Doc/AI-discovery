@@ -4,25 +4,29 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Your Discovery Call — AI Growth Catalyst</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="alternate icon" href="../favicon.svg" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="apple-touch-icon" href="/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --cream: #fbf6ec;
-    --cream-2: #f4ecdc;
-    --cream-3: #ede2cb;
-    --ink: #1a2332;
-    --ink-soft: #2c3a4f;
-    --ink-dim: #5d6b80;
-    --ink-faint: #8b95a6;
+    --cream: #fafaf7;
+    --cream-2: #f1f1ec;
+    --cream-3: #e6e6df;
+    --ink: #0f172a;
+    --ink-soft: #1e293b;
+    --ink-dim: #475569;
+    --ink-faint: #94a3b8;
     --terracotta: #c85a3e;
     --terracotta-deep: #a3432b;
-    --terracotta-soft: #f0d4c8;
-    --sage: #6b8268;
+    --terracotta-soft: #fde7df;
+    --sage: #4f7d3f;
     --gold: #b8843a;
-    --line: rgba(26, 35, 50, 0.12);
-    --line-soft: rgba(26, 35, 50, 0.06);
+    --line: rgba(15, 23, 42, 0.10);
+    --line-soft: rgba(15, 23, 42, 0.05);
     --warn: #b8843a;
     --live: #c85a3e;
   }
@@ -45,10 +49,7 @@
       radial-gradient(ellipse 50% 50% at 90% 30%, rgba(107, 130, 104, 0.06), transparent 70%);
     pointer-events: none;
     z-index: 0;
-  }
-  .serif { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 400; }
-
-  .top-bar {
+  }.top-bar {
     position: relative;
     z-index: 10;
     border-bottom: 1px solid var(--line);
@@ -91,10 +92,9 @@
   }
   header.page-header { margin-bottom: 2.5rem; text-align: center; }
   h1 {
-    font-family: 'Fraunces', Georgia, serif;
     margin: 0 0 1rem;
     font-size: clamp(2rem, 4.5vw, 3rem);
-    font-weight: 400;
+    font-weight: 700;
     letter-spacing: -0.025em;
     line-height: 1.05;
   }
@@ -154,9 +154,8 @@
   }
   .stat-val {
     margin: 0;
-    font-family: 'Fraunces', Georgia, serif;
     font-size: 1.65rem;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: -0.015em;
     font-variant-numeric: tabular-nums;
     color: var(--ink);
@@ -201,11 +200,10 @@
   }
   .current-q-text {
     margin: 0;
-    font-family: 'Fraunces', Georgia, serif;
     font-size: 1.25rem;
     line-height: 1.45;
     letter-spacing: -0.01em;
-    font-weight: 400;
+    font-weight: 500;
   }
 
   .controls {
@@ -287,7 +285,6 @@
     padding: 2.5rem 0;
     margin: 0;
     font-style: italic;
-    font-family: 'Fraunces', Georgia, serif;
   }
   .turn { padding: 0.85rem 0; border-bottom: 1px solid var(--line); }
   .turn:last-child { border-bottom: none; }
@@ -331,7 +328,6 @@
     line-height: 1.6;
     text-align: center;
     font-style: italic;
-    font-family: 'Fraunces', Georgia, serif;
   }
 
   .name-prompt {
