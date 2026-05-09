@@ -5,13 +5,11 @@ const BACKEND_URL = "https://ai-discovery-tx39.onrender.com";
 // =============================================================
 
 const TOPICS = [
-  { id: 'business_overview',     label: 'Business overview',    opener: "To start, can you tell me about your business — what you do, who your customers are, and roughly how big the team is?" },
-  { id: 'daily_operations',      label: 'Daily operations',     opener: "Walk me through a typical day or week in the business. What are the main activities and who does what?" },
-  { id: 'systems_tools',         label: 'Systems and tools',    opener: "What software, systems, or tools do you currently use to run the business? Things like CRM, accounting, email, project management." },
-  { id: 'manual_work',           label: 'Manual work',          opener: "Now let's get specific. What tasks do you or your team do manually that, when you really think about it, feel like a computer could probably do them?" },
-  { id: 'pain_points',           label: 'Pain points',          opener: "What are the biggest pain points or frustrations in the business right now? The things that genuinely slow you down or stress you out." },
-  { id: 'customer_interactions', label: 'Customer interactions',opener: "Tell me about how you interact with customers. Inquiries, support, follow-ups, that sort of thing." },
-  { id: 'priorities_goals',      label: 'Priorities and goals', opener: "If you could wave a magic wand and have one thing in your business automated or improved tomorrow, what would it be — and why that one?" }
+  { id: 'business_overview',     label: 'Business overview',    opener: "To start, can you give me a quick picture of the business — what you do, who your customers are, and roughly how big the team is?" },
+  { id: 'systems_and_work',      label: 'Systems and manual work', opener: "What are the main tools you use to run the business — and what are the tasks you or your team do manually that feel like a computer could probably handle?" },
+  { id: 'pain_points',           label: 'Pain points',          opener: "What are the biggest frustrations in the business right now? The things that genuinely slow you down or stress you out." },
+  { id: 'customer_interactions', label: 'Customer interactions',opener: "Briefly, how do you handle customer enquiries, support, and follow-ups today?" },
+  { id: 'priorities_goals',      label: 'Priorities and goals', opener: "Last one — if you could wave a magic wand and have one thing in your business automated tomorrow, what would it be?" }
 ];
 
 let state = {
@@ -334,7 +332,7 @@ function startCall() {
 
   state.currentTopicIdx = 0;
   state.exchangesOnTopic = 1;
-  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. I'll ask you a series of questions about your business — there's no recommendations from me on the call, and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
+  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. This is a quick fifteen-minute call to get a high-level picture of your business — I'll ask a few broad questions, with no recommendations from me on the call and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
   pushAgent(opener);
   speak(opener, function() { startListening(); });
 }
