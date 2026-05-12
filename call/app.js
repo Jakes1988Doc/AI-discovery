@@ -5,11 +5,54 @@ const BACKEND_URL = "https://ai-discovery-tx39.onrender.com";
 // =============================================================
 
 const TOPICS = [
-  { id: 'business_overview',     label: 'Business overview',    opener: "To start, can you give me a quick picture of the business — what you do, who your customers are, and roughly how big the team is?" },
-  { id: 'systems_and_work',      label: 'Systems and manual work', opener: "What are the main tools you use to run the business — and what are the tasks you or your team do manually that feel like a computer could probably handle?" },
-  { id: 'pain_points',           label: 'Pain points',          opener: "What are the biggest frustrations in the business right now? The things that genuinely slow you down or stress you out." },
-  { id: 'customer_interactions', label: 'Customer interactions',opener: "Briefly, how do you handle customer enquiries, support, and follow-ups today?" },
-  { id: 'priorities_goals',      label: 'Priorities and goals', opener: "Last one — if you could wave a magic wand and have one thing in your business automated tomorrow, what would it be?" }
+  {
+    id: 'business_snapshot',
+    label: 'Business snapshot',
+    opener: "To kick us off — what does the business do, roughly how many people are in the team, and what's the main way revenue comes in?",
+    probeQuestion: "And how long have you been running it, and is it mainly you driving the day-to-day or do you have people managing different areas?",
+    moveOnCriteria: "you know what they do, team size, and revenue model",
+    allowProbe: false
+  },
+  {
+    id: 'tech_stack',
+    label: 'Tech stack',
+    opener: "What are the main tools and systems the business runs on day-to-day — things like how you manage customers or jobs, accounting, communications, taking orders, anything like that?",
+    probeQuestion: "Is there anything in that list where you feel like you're working around the tool rather than with it — like it doesn't quite do what you need so you've had to add a workaround?",
+    moveOnCriteria: "you've heard their core tools — CRM, accounting, comms, job management — and any friction with those tools",
+    allowProbe: true
+  },
+  {
+    id: 'process_walkthrough',
+    label: 'Process walkthrough',
+    opener: "Pick one process that happens regularly in the business — could be taking a new order, handling an enquiry, sending an invoice, anything — and just walk me through what actually happens, step by step, from start to finish.",
+    probeQuestion: "Where in that process does someone have to stop and do something manually that feels like it should just happen automatically?",
+    moveOnCriteria: "they've narrated a real process and you've identified at least one manual step or handoff",
+    allowProbe: true
+  },
+  {
+    id: 'time_and_pain',
+    label: 'Time and pain points',
+    opener: "If you think about a typical week — roughly how many hours would you say go into things that aren't actually the core work? I mean admin, chasing people, data entry, copying things from one place to another, that kind of thing.",
+    probeQuestion: "Is there one specific task in that list where you've genuinely thought 'I can't believe we're still doing this by hand'?",
+    moveOnCriteria: "you've heard either a time estimate or a specific frustrating manual task",
+    allowProbe: true
+  },
+  {
+    id: 'customer_journey',
+    label: 'Customer journey',
+    opener: "How does a new customer typically come to you, and what happens from that first contact through to them paying and coming back — is that process pretty consistent or does it vary?",
+    probeQuestion: "And after the job or sale is done — do you have a consistent way of following up with customers, or does that depend on who's available at the time?",
+    moveOnCriteria: "you understand how enquiries come in, how they're handled, and whether follow-up is systematic or ad-hoc",
+    allowProbe: true
+  },
+  {
+    id: 'magic_wand',
+    label: 'Magic wand',
+    opener: "Last one — if I could fix one thing in your business tomorrow and it would just work, no cost, no effort on your part — what would it be?",
+    probeQuestion: null,
+    moveOnCriteria: "they've answered",
+    allowProbe: false
+  }
 ];
 
 let state = {
@@ -29,7 +72,8 @@ let state = {
   silenceTimer: null,
   clientName: '',
   businessName: '',
-  email: ''
+  email: '',
+  signalDetectedOnCurrentTopic: false
 };
 
 const dot = document.getElementById('dot');
@@ -164,35 +208,70 @@ async function generateNextQuestion() {
         totalTopics: TOPICS.length,
         exchangesOnTopic: state.exchangesOnTopic,
         remainingTopics: remainingTopics,
-        isLastTopic: isLastTopic
+        isLastTopic: isLastTopic,
+        signalDetected: state.signalDetectedOnCurrentTopic,
+        topicProbeQuestion: currentTopic.probeQuestion || '',
+        topicMoveOnCriteria: currentTopic.moveOnCriteria || '',
+        topicAllowsProbe: currentTopic.allowProbe !== false
       })
     });
     if (!response.ok) throw new Error('Backend ' + response.status);
-    return await response.json();
+    const decision = await response.json();
+
+    // Track signal detection returned by the agent
+    if (decision.signal_detected === true) {
+      state.signalDetectedOnCurrentTopic = true;
+    }
+
+    return decision;
   } catch (err) {
     console.error('Backend error', err);
     showWarn('Could not reach the backend. Falling back to next topic.');
     const nextIdx = state.currentTopicIdx + 1;
     if (nextIdx >= TOPICS.length) {
-      return { next_question: "Thanks for sharing all of this. Is there anything I haven't asked about that you think would be useful for me to know?", action: 'wrap_up' };
+      return { next_question: "Thanks for sharing all of this. Is there anything else you'd like me to know before we wrap up?", action: 'wrap_up' };
     }
     return { next_question: TOPICS[nextIdx].opener, action: 'next_topic' };
   }
 }
 
 async function handleAnswerAndContinue() {
+  const currentTopic = TOPICS[state.currentTopicIdx];
+
+  // Hard guard: if this topic doesn't allow probes and we've had the opener exchange,
+  // force next_topic without even calling the backend
+  if (!currentTopic.allowProbe && state.exchangesOnTopic >= 1) {
+    const nextIdx = state.currentTopicIdx + 1;
+    if (nextIdx >= TOPICS.length) {
+      const closing = "Thanks so much for your time today. That's genuinely useful context. We'll put together your personalised roadmap and be in touch within 48 hours.";
+      pushAgent(closing);
+      speak(closing);
+      state.callOver = true;
+      return;
+    }
+    state.currentTopicIdx = nextIdx;
+    state.exchangesOnTopic = 0;
+    state.signalDetectedOnCurrentTopic = false;
+    const nextTopic = TOPICS[state.currentTopicIdx];
+    pushAgent(nextTopic.opener);
+    speak(nextTopic.opener, function() { startListening(); });
+    return;
+  }
+
   const decision = await generateNextQuestion();
   clearWarn();
 
   if (decision.action === 'next_topic') {
     state.currentTopicIdx = Math.min(state.currentTopicIdx + 1, TOPICS.length - 1);
-    state.exchangesOnTopic = 1;
+    state.exchangesOnTopic = 0;
+    state.signalDetectedOnCurrentTopic = false;
   } else if (decision.action === 'wrap_up') {
     pushAgent(decision.next_question);
     speak(decision.next_question, function() { startListening(); });
     state.callOver = true;
     return;
   } else {
+    // followup
     state.exchangesOnTopic++;
   }
 
@@ -331,8 +410,9 @@ function startCall() {
   nameSection.style.opacity = '0.5';
 
   state.currentTopicIdx = 0;
-  state.exchangesOnTopic = 1;
-  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. This is a quick fifteen-minute call to get a high-level picture of your business — I'll ask a few broad questions, with no recommendations from me on the call and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
+  state.exchangesOnTopic = 0;
+  state.signalDetectedOnCurrentTopic = false;
+  const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. This is a quick fifteen-minute call to get a high-level picture of your business — I'll ask a few broad questions across six areas, with no recommendations from me on the call and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
   pushAgent(opener);
   speak(opener, function() { startListening(); });
 }
