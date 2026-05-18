@@ -246,7 +246,23 @@ async function speak(text, onDone) {
       speakFallback(text, onDone);
     };
 
-    await audio.play();
+    try {
+      await audio.play();
+    } catch (playErr) {
+      console.warn('Autoplay blocked, trying AudioContext resume:', playErr);
+      // Try to resume AudioContext then play again
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        await ctx.resume();
+        await audio.play();
+      } catch (retryErr) {
+        console.warn('Retry failed, falling back to browser TTS:', retryErr);
+        state.isSpeaking = false;
+        currentAudio = null;
+        URL.revokeObjectURL(audioUrl);
+        speakFallback(text, onDone);
+      }
+    }
 
   } catch (err) {
     console.warn('ElevenLabs speak failed, using browser TTS:', err);
@@ -502,6 +518,18 @@ function setupRecognition() {
   state.recognition = rec;
 }
 
+// Unlock audio context on first user gesture — required by Chrome autoplay policy
+// Must be called synchronously inside a click/tap handler
+function unlockAudio() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = ctx.createBuffer(1, 1, 22050);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(0);
+  src.onended = function() { ctx.close(); };
+}
+
 function startCall() {
   const cn = (clientNameInput.value || '').trim();
   const bn = (businessNameInput.value || '').trim();
@@ -518,6 +546,9 @@ function startCall() {
   state.businessName = bn;
   state.email = em;
   clearWarn();
+
+  // Unlock audio on this user gesture before any async calls
+  unlockAudio();
 
   state.started = true;
   state.startTime = Date.now();
