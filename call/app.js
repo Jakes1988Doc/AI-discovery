@@ -174,18 +174,20 @@ function renderTranscript() {
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
-function speak(text, onDone) {
+// ============================================================
+//  speak() — ElevenLabs TTS via backend proxy, browser TTS fallback
+// ============================================================
+let currentAudio = null;
+
+function speakFallback(text, onDone) {
+  // Browser TTS fallback when ElevenLabs is unavailable
   if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
   const voices = window.speechSynthesis.getVoices();
   const preferred =
-    voices.find(function(v) { return /en-ZA/i.test(v.lang); }) ||
-    voices.find(function(v) { return /en-GB/i.test(v.lang) && /female|samantha|kate|karen|tessa|fiona|serena/i.test(v.name); }) ||
     voices.find(function(v) { return /en-GB/i.test(v.lang); }) ||
-    voices.find(function(v) { return /en-US/i.test(v.lang) && /female|samantha|karen|allison|ava|nicky/i.test(v.name); }) ||
-    voices.find(function(v) { return /en-US/i.test(v.lang); }) ||
     voices.find(function(v) { return v.lang.startsWith('en'); });
   if (preferred) utter.voice = preferred;
   state.isSpeaking = true;
@@ -193,6 +195,64 @@ function speak(text, onDone) {
   utter.onend  = function() { state.isSpeaking = false; if (onDone) onDone(); };
   utter.onerror = function() { state.isSpeaking = false; if (onDone) onDone(); };
   window.speechSynthesis.speak(utter);
+}
+
+async function speak(text, onDone) {
+  // Stop any currently playing audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+  state.isSpeaking = true;
+  setStatus('Agent speaking…', 'speaking');
+
+  try {
+    const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    });
+
+    // If backend signals fallback (ElevenLabs not configured or error)
+    if (!response.ok || response.headers.get('Content-Type')?.includes('application/json')) {
+      const data = await response.json().catch(() => ({}));
+      if (data.fallback) {
+        speakFallback(text, onDone);
+        return;
+      }
+      throw new Error('Speak endpoint error');
+    }
+
+    // Stream audio from ElevenLabs response
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    currentAudio = audio;
+
+    audio.onended = function() {
+      state.isSpeaking = false;
+      currentAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      if (onDone) onDone();
+    };
+    audio.onerror = function() {
+      console.warn('Audio playback error — falling back to browser TTS');
+      state.isSpeaking = false;
+      currentAudio = null;
+      URL.revokeObjectURL(audioUrl);
+      speakFallback(text, onDone);
+    };
+
+    await audio.play();
+
+  } catch (err) {
+    console.warn('ElevenLabs speak failed, using browser TTS:', err);
+    state.isSpeaking = false;
+    speakFallback(text, onDone);
+  }
 }
 
 function pushAgent(text) {
@@ -427,7 +487,7 @@ function setupRecognition() {
         stopListening();
         captureAnswer(state.finalTranscript);
       }
-    }, 2200);
+    }, 1000);
   };
   rec.onerror = function(ev) {
     if (ev.error === 'not-allowed') {
@@ -485,6 +545,8 @@ function startCall() {
 async function endCallEarly() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll be in touch about the £350 roadmap. No obligation either way.";
   pushAgent(closing);
   await saveTranscriptToBackend();
@@ -521,12 +583,15 @@ function resetAll() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   state = {
     started: false, callOver: false, currentTopicIdx: 0, exchangesOnTopic: 0,
     questionsAsked: 0, topicsCovered: new Set(), transcript: [],
     startTime: null, timerInterval: null, recognition: state.recognition,
     isListening: false, isSpeaking: false, finalTranscript: '', silenceTimer: null,
-    clientName: '', businessName: '', email: ''
+    clientName: '', businessName: '', email: '',
+    signalDetectedOnCurrentTopic: false, signalStrengthOnCurrentTopic: 'none',
+    deepProbeAvailable: true, deepProbeUsedOnTopic: false
   };
   currentQEl.textContent = "When you press start, the agent will ask its first question and listen for your reply.";
   topicPill.textContent = 'Intro';
