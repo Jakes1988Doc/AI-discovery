@@ -440,6 +440,66 @@ async function sendInternalNotes(clientName, businessName, clientEmail, docBuffe
 }
 
 // ============================================================
+//  POST /api/speak  — ElevenLabs TTS proxy
+//  Keeps ELEVENLABS_API_KEY server-side, never exposed to browser
+// ============================================================
+app.post('/api/speak', async (req, res) => {
+  const { text } = req.body || {};
+  if (!text) return res.status(400).json({ error: 'No text provided' });
+
+  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+  const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'vXdn3dxpDdZHARskOYfz';
+
+  if (!ELEVENLABS_API_KEY) {
+    // Fallback signal — tells frontend to use browser TTS instead
+    return res.status(503).json({ error: 'ElevenLabs not configured', fallback: true });
+  }
+
+  try {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text: text,
+        model_id: 'eleven_turbo_v2',
+        voice_settings: {
+          stability: 0.45,
+          similarity_boost: 0.85,
+          style: 0.2,
+          use_speaker_boost: true
+        }
+      })
+    });
+
+    if (!r.ok) {
+      const err = await r.text();
+      console.error('ElevenLabs error', r.status, err);
+      return res.status(500).json({ error: 'ElevenLabs API error', fallback: true });
+    }
+
+    // Stream audio directly back to browser
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    const reader = r.body.getReader();
+    const pump = async () => {
+      const { done, value } = await reader.read();
+      if (done) { res.end(); return; }
+      res.write(Buffer.from(value));
+      await pump();
+    };
+    await pump();
+
+  } catch (err) {
+    console.error('/api/speak error', err);
+    res.status(500).json({ error: 'Server error', fallback: true });
+  }
+});
+
+// ============================================================
 //  POST /api/save-transcript
 // ============================================================
 app.post('/api/save-transcript', async (req, res) => {
