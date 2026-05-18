@@ -401,11 +401,9 @@ async function handleAnswerAndContinue() {
 function moveToNextTopic() {
   const nextIdx = state.currentTopicIdx + 1;
   if (nextIdx >= TOPICS.length) {
-    // Finished all topics — wrap up
-    const closing = "That's really helpful — thank you. Is there anything else you feel is worth mentioning before we finish up?";
-    pushAgent(closing);
-    speak(closing, function() { startListening(); });
+    // All topics done — save and close cleanly
     state.callOver = true;
+    saveTranscriptToBackend();
     return;
   }
   state.currentTopicIdx = nextIdx;
@@ -471,17 +469,18 @@ async function captureAnswer(text) {
   text = text.trim();
   if (!text) return;
   pushUser(text);
-  setStatus('Got it. Thinking about what to ask next…', 'thinking');
 
   if (state.callOver) {
-    const closing = "That's everything I wanted to ask. Thanks so much for taking the time. A human will now review what you've shared. If we identify a clear fit for AI in your business, we'll be in touch about the £350 bespoke roadmap. No pressure either way.";
-    pushAgent(closing);
+    // Call already wrapped up — prospect said something after closing
+    // Just save the transcript silently, no second closing message
+    setStatus('Saving…', 'thinking');
     await saveTranscriptToBackend();
-    speak(closing);
     setStatus('Interview complete.', null);
     stopBtn.disabled = true;
     return;
   }
+
+  setStatus('Got it. Thinking about what to ask next…', 'thinking');
   await handleAnswerAndContinue();
 }
 
