@@ -440,6 +440,46 @@ async function sendInternalNotes(clientName, businessName, clientEmail, docBuffe
 }
 
 // ============================================================
+//  GET /api/speak-test  — diagnostic endpoint
+// ============================================================
+app.get('/api/speak-test', async (req, res) => {
+  const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+  const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'hpp4J3VqNfWAUOO0d1Us';
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.json({ status: 'error', reason: 'ELEVENLABS_API_KEY not set in environment' });
+  }
+
+  try {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text: 'Hello this is a test.',
+        model_id: 'eleven_turbo_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.8 }
+      })
+    });
+
+    const detail = r.ok ? null : await r.text();
+    return res.json({
+      status: r.ok ? 'success' : 'error',
+      http_status: r.status,
+      content_type: r.headers.get('Content-Type'),
+      voice_id: VOICE_ID,
+      key_prefix: ELEVENLABS_API_KEY.substring(0, 8) + '...',
+      elevenlabs_error: detail || null
+    });
+  } catch (err) {
+    return res.json({ status: 'exception', error: err.message });
+  }
+});
+
+// ============================================================
 //  POST /api/speak  — ElevenLabs TTS proxy
 //  Keeps ELEVENLABS_API_KEY server-side, never exposed to browser
 // ============================================================
@@ -448,10 +488,9 @@ app.post('/api/speak', async (req, res) => {
   if (!text) return res.status(400).json({ error: 'No text provided' });
 
   const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-  const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'vXdn3dxpDdZHARskOYfz';
+  const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'hpp4J3VqNfWAUOO0d1Us';
 
   if (!ELEVENLABS_API_KEY) {
-    // Fallback signal — tells frontend to use browser TTS instead
     return res.status(503).json({ error: 'ElevenLabs not configured', fallback: true });
   }
 
@@ -478,7 +517,11 @@ app.post('/api/speak', async (req, res) => {
     if (!r.ok) {
       const err = await r.text();
       console.error('ElevenLabs error', r.status, err);
-      return res.status(500).json({ error: 'ElevenLabs API error', fallback: true });
+      return res.status(500).json({
+        error: 'ElevenLabs API error',
+        detail: err,
+        fallback: true
+      });
     }
 
     // Stream audio directly back to browser
@@ -495,7 +538,7 @@ app.post('/api/speak', async (req, res) => {
 
   } catch (err) {
     console.error('/api/speak error', err);
-    res.status(500).json({ error: 'Server error', fallback: true });
+    res.status(500).json({ error: 'Server error', detail: err.message, fallback: true });
   }
 });
 
