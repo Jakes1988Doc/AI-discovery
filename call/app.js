@@ -176,37 +176,40 @@ function renderTranscript() {
 
 // ============================================================
 //  speak() — ElevenLabs TTS via backend proxy, browser TTS fallback
+//  onDone is GUARANTEED to fire via Promise regardless of path
 // ============================================================
 let currentAudio = null;
 
-function speakFallback(text, onDone) {
-  // Browser TTS fallback when ElevenLabs is unavailable
-  if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
-  window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
-  const voices = window.speechSynthesis.getVoices();
-  const preferred =
-    voices.find(function(v) { return /en-GB/i.test(v.lang); }) ||
-    voices.find(function(v) { return v.lang.startsWith('en'); });
-  if (preferred) utter.voice = preferred;
-  state.isSpeaking = true;
-  setStatus('Agent speaking…', 'speaking');
-  utter.onend  = function() { state.isSpeaking = false; if (onDone) onDone(); };
-  utter.onerror = function() { state.isSpeaking = false; if (onDone) onDone(); };
-  window.speechSynthesis.speak(utter);
+function speakFallback(text) {
+  return new Promise(function(resolve) {
+    if (!('speechSynthesis' in window)) { resolve(); return; }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred =
+      voices.find(function(v) { return /en-GB/i.test(v.lang); }) ||
+      voices.find(function(v) { return v.lang.startsWith('en'); });
+    if (preferred) utter.voice = preferred;
+    utter.onend  = function() { resolve(); };
+    utter.onerror = function() { resolve(); };
+    window.speechSynthesis.speak(utter);
+  });
 }
 
 async function speak(text, onDone) {
   // Stop any currently playing audio
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio = null;
-  }
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
   state.isSpeaking = true;
   setStatus('Agent speaking…', 'speaking');
+
+  const finish = function() {
+    state.isSpeaking = false;
+    setStatus('Listening…', 'listening');
+    if (onDone) onDone();
+  };
 
   try {
     const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/speak', {
@@ -215,59 +218,57 @@ async function speak(text, onDone) {
       body: JSON.stringify({ text: text })
     });
 
-    // If backend signals fallback (ElevenLabs not configured or error)
-    if (!response.ok || response.headers.get('Content-Type')?.includes('application/json')) {
-      const data = await response.json().catch(() => ({}));
-      if (data.fallback) {
-        speakFallback(text, onDone);
-        return;
-      }
-      throw new Error('Speak endpoint error');
+    const contentType = response.headers.get('Content-Type') || '';
+
+    // Backend error or fallback signal
+    if (!response.ok || contentType.includes('application/json')) {
+      console.warn('ElevenLabs unavailable, using browser TTS');
+      await speakFallback(text);
+      finish();
+      return;
     }
 
-    // Stream audio from ElevenLabs response
+    // ElevenLabs returned audio — play it
     const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      console.warn('Empty audio response, using browser TTS');
+      await speakFallback(text);
+      finish();
+      return;
+    }
+
     const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
     currentAudio = audio;
 
-    audio.onended = function() {
-      state.isSpeaking = false;
-      currentAudio = null;
-      URL.revokeObjectURL(audioUrl);
-      if (onDone) onDone();
-    };
-    audio.onerror = function() {
-      console.warn('Audio playback error — falling back to browser TTS');
-      state.isSpeaking = false;
-      currentAudio = null;
-      URL.revokeObjectURL(audioUrl);
-      speakFallback(text, onDone);
-    };
-
-    try {
-      await audio.play();
-    } catch (playErr) {
-      console.warn('Autoplay blocked, trying AudioContext resume:', playErr);
-      // Try to resume AudioContext then play again
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        await ctx.resume();
-        await audio.play();
-      } catch (retryErr) {
-        console.warn('Retry failed, falling back to browser TTS:', retryErr);
-        state.isSpeaking = false;
+    await new Promise(function(resolve) {
+      audio.onended = function() {
         currentAudio = null;
         URL.revokeObjectURL(audioUrl);
-        speakFallback(text, onDone);
-      }
-    }
+        resolve();
+      };
+      audio.onerror = function(e) {
+        console.warn('Audio error:', e);
+        currentAudio = null;
+        URL.revokeObjectURL(audioUrl);
+        resolve(); // resolve anyway so finish() fires
+      };
+      audio.play().catch(async function(playErr) {
+        console.warn('Autoplay blocked:', playErr);
+        currentAudio = null;
+        URL.revokeObjectURL(audioUrl);
+        await speakFallback(text);
+        resolve();
+      });
+    });
+
+    finish();
 
   } catch (err) {
-    console.warn('ElevenLabs speak failed, using browser TTS:', err);
-    state.isSpeaking = false;
-    speakFallback(text, onDone);
+    console.warn('speak() error, using browser TTS:', err);
+    await speakFallback(text);
+    finish();
   }
 }
 
