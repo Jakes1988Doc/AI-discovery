@@ -9,49 +9,70 @@ const TOPICS = [
     id: 'business_snapshot',
     label: 'Business snapshot',
     opener: "To kick us off — what does the business do, roughly how many people are in the team, and what's the main way revenue comes in?",
-    probeQuestion: "And how long have you been running it, and is it mainly you driving the day-to-day or do you have people managing different areas?",
+    probeQuestion: "And is it mainly you driving the day-to-day, or do you have people managing different areas of the business?",
     moveOnCriteria: "you know what they do, team size, and revenue model",
-    allowProbe: false
+    allowProbe: false,
+    allowDeepProbe: false
   },
   {
     id: 'tech_stack',
     label: 'Tech stack',
     opener: "What are the main tools and systems the business runs on day-to-day — things like how you manage customers or jobs, accounting, communications, taking orders, anything like that?",
     probeQuestion: "Is there anything in that list where you feel like you're working around the tool rather than with it — like it doesn't quite do what you need so you've had to add a workaround?",
-    moveOnCriteria: "you've heard their core tools — CRM, accounting, comms, job management — and any friction with those tools",
-    allowProbe: true
+    deepProbeQuestion: "And when that workaround breaks down — what actually happens? Does work get missed, or does someone have to step in manually each time?",
+    moveOnCriteria: "you've heard their core tools and any friction or workarounds",
+    allowProbe: true,
+    allowDeepProbe: true
   },
   {
     id: 'process_walkthrough',
     label: 'Process walkthrough',
     opener: "Pick one process that happens regularly in the business — could be taking a new order, handling an enquiry, sending an invoice, anything — and just walk me through what actually happens, step by step, from start to finish.",
     probeQuestion: "Where in that process does someone have to stop and do something manually that feels like it should just happen automatically?",
-    moveOnCriteria: "they've narrated a real process and you've identified at least one manual step or handoff",
-    allowProbe: true
+    deepProbeQuestion: "And roughly how often does that happen — is that a daily thing, or more like every time a new order comes in?",
+    moveOnCriteria: "they've narrated a real process and you've identified at least one manual step",
+    allowProbe: true,
+    allowDeepProbe: true
   },
   {
     id: 'time_and_pain',
     label: 'Time and pain points',
-    opener: "If you think about a typical week — roughly how many hours would you say go into things that aren't actually the core work? I mean admin, chasing people, data entry, copying things from one place to another, that kind of thing.",
+    opener: "If you think about a typical week — roughly how many hours would you say go into things that aren't the core work? Admin, chasing people, data entry, copying things between systems, that kind of thing.",
     probeQuestion: "Is there one specific task in that list where you've genuinely thought 'I can't believe we're still doing this by hand'?",
-    moveOnCriteria: "you've heard either a time estimate or a specific frustrating manual task",
-    allowProbe: true
+    deepProbeQuestion: "And is that something one person owns, or does it fall to whoever's available at the time?",
+    moveOnCriteria: "you've heard a time estimate or a specific frustrating manual task",
+    allowProbe: true,
+    allowDeepProbe: true
+  },
+  {
+    id: 'admin_tasks',
+    label: 'Admin and documents',
+    opener: "What about the pure admin side of things — I'm talking meeting notes, reports, filing, preparing documents, chasing approvals, anything that's more paperwork than actual work. Is any of that eating into your week in a way that frustrates you?",
+    probeQuestion: "Is there a specific document or report that gets produced regularly that you think — if you're honest — probably takes longer than it should?",
+    deepProbeQuestion: "And who ends up doing that — is it you personally, or does it get passed around depending on who has time?",
+    moveOnCriteria: "you've heard whether admin is a real time drain and identified at least one specific admin task",
+    allowProbe: true,
+    allowDeepProbe: true
   },
   {
     id: 'customer_journey',
     label: 'Customer journey',
-    opener: "How does a new customer typically come to you, and what happens from that first contact through to them paying and coming back — is that process pretty consistent or does it vary?",
+    opener: "How does a new customer typically come to you, and what happens from that first contact through to them paying and coming back — is that process pretty consistent or does it vary a lot?",
     probeQuestion: "And after the job or sale is done — do you have a consistent way of following up with customers, or does that depend on who's available at the time?",
+    deepProbeQuestion: "When follow-up does happen — is that something you're doing personally, or is there someone in the team whose job that is?",
     moveOnCriteria: "you understand how enquiries come in, how they're handled, and whether follow-up is systematic or ad-hoc",
-    allowProbe: true
+    allowProbe: true,
+    allowDeepProbe: false
   },
   {
     id: 'magic_wand',
     label: 'Magic wand',
     opener: "Last one — if I could fix one thing in your business tomorrow and it would just work, no cost, no effort on your part — what would it be?",
     probeQuestion: null,
+    deepProbeQuestion: null,
     moveOnCriteria: "they've answered",
-    allowProbe: false
+    allowProbe: false,
+    allowDeepProbe: false
   }
 ];
 
@@ -73,7 +94,10 @@ let state = {
   clientName: '',
   businessName: '',
   email: '',
-  signalDetectedOnCurrentTopic: false
+  signalDetectedOnCurrentTopic: false,
+  signalStrengthOnCurrentTopic: 'none', // 'none' | 'standard' | 'strong'
+  deepProbeAvailable: true,             // one deep probe allowed per call
+  deepProbeUsedOnTopic: false           // whether deep probe used on current topic
 };
 
 const dot = document.getElementById('dot');
@@ -210,17 +234,27 @@ async function generateNextQuestion() {
         remainingTopics: remainingTopics,
         isLastTopic: isLastTopic,
         signalDetected: state.signalDetectedOnCurrentTopic,
+        signalStrength: state.signalStrengthOnCurrentTopic,
         topicProbeQuestion: currentTopic.probeQuestion || '',
+        topicDeepProbeQuestion: currentTopic.deepProbeQuestion || '',
         topicMoveOnCriteria: currentTopic.moveOnCriteria || '',
-        topicAllowsProbe: currentTopic.allowProbe !== false
+        topicAllowsProbe: currentTopic.allowProbe !== false,
+        topicAllowsDeepProbe: currentTopic.allowDeepProbe === true,
+        deepProbeAvailable: state.deepProbeAvailable,
+        deepProbeUsedOnTopic: state.deepProbeUsedOnTopic
       })
     });
     if (!response.ok) throw new Error('Backend ' + response.status);
     const decision = await response.json();
 
-    // Track signal detection returned by the agent
+    // Track signal state returned by agent
     if (decision.signal_detected === true) {
       state.signalDetectedOnCurrentTopic = true;
+    }
+    if (decision.signal_strength === 'strong' && state.deepProbeAvailable && currentTopic.allowDeepProbe) {
+      state.signalStrengthOnCurrentTopic = 'strong';
+    } else if (decision.signal_detected === true) {
+      state.signalStrengthOnCurrentTopic = 'standard';
     }
 
     return decision;
@@ -238,23 +272,26 @@ async function generateNextQuestion() {
 async function handleAnswerAndContinue() {
   const currentTopic = TOPICS[state.currentTopicIdx];
 
-  // Hard guard: if this topic doesn't allow probes and we've had the opener exchange,
-  // force next_topic without even calling the backend
+  // Hard guard: no-probe topics move on immediately after opener
   if (!currentTopic.allowProbe && state.exchangesOnTopic >= 1) {
-    const nextIdx = state.currentTopicIdx + 1;
-    if (nextIdx >= TOPICS.length) {
-      const closing = "Thanks so much for your time today. That's genuinely useful context. We'll put together your personalised roadmap and be in touch within 48 hours.";
-      pushAgent(closing);
-      speak(closing);
-      state.callOver = true;
-      return;
-    }
-    state.currentTopicIdx = nextIdx;
-    state.exchangesOnTopic = 0;
-    state.signalDetectedOnCurrentTopic = false;
-    const nextTopic = TOPICS[state.currentTopicIdx];
-    pushAgent(nextTopic.opener);
-    speak(nextTopic.opener, function() { startListening(); });
+    moveToNextTopic();
+    return;
+  }
+
+  // Hard guard: deep probe spent or not allowed — force next_topic after standard probe
+  const deepProbeEligible = currentTopic.allowDeepProbe &&
+                             state.deepProbeAvailable &&
+                             !state.deepProbeUsedOnTopic;
+
+  // If we've already done a standard probe AND no deep probe is eligible, move on
+  if (state.exchangesOnTopic >= 2 && !deepProbeEligible) {
+    moveToNextTopic();
+    return;
+  }
+
+  // If we've done a standard probe AND a deep probe, always move on
+  if (state.exchangesOnTopic >= 3) {
+    moveToNextTopic();
     return;
   }
 
@@ -262,21 +299,46 @@ async function handleAnswerAndContinue() {
   clearWarn();
 
   if (decision.action === 'next_topic') {
-    state.currentTopicIdx = Math.min(state.currentTopicIdx + 1, TOPICS.length - 1);
-    state.exchangesOnTopic = 0;
-    state.signalDetectedOnCurrentTopic = false;
-  } else if (decision.action === 'wrap_up') {
+    moveToNextTopic();
+    return;
+  }
+
+  if (decision.action === 'wrap_up') {
     pushAgent(decision.next_question);
     speak(decision.next_question, function() { startListening(); });
     state.callOver = true;
     return;
-  } else {
-    // followup
-    state.exchangesOnTopic++;
+  }
+
+  // followup — track whether this is a deep probe
+  state.exchangesOnTopic++;
+  if (decision.is_deep_probe === true) {
+    state.deepProbeUsedOnTopic = true;
+    state.deepProbeAvailable = false; // spend the global budget
   }
 
   pushAgent(decision.next_question);
   speak(decision.next_question, function() { startListening(); });
+}
+
+function moveToNextTopic() {
+  const nextIdx = state.currentTopicIdx + 1;
+  if (nextIdx >= TOPICS.length) {
+    // Finished all topics — wrap up
+    const closing = "That's really helpful — thank you. Is there anything else you feel is worth mentioning before we finish up?";
+    pushAgent(closing);
+    speak(closing, function() { startListening(); });
+    state.callOver = true;
+    return;
+  }
+  state.currentTopicIdx = nextIdx;
+  state.exchangesOnTopic = 0;
+  state.signalDetectedOnCurrentTopic = false;
+  state.signalStrengthOnCurrentTopic = 'none';
+  state.deepProbeUsedOnTopic = false;
+  const nextTopic = TOPICS[state.currentTopicIdx];
+  pushAgent(nextTopic.opener);
+  speak(nextTopic.opener, function() { startListening(); });
 }
 
 async function saveTranscriptToBackend() {
@@ -412,6 +474,9 @@ function startCall() {
   state.currentTopicIdx = 0;
   state.exchangesOnTopic = 0;
   state.signalDetectedOnCurrentTopic = false;
+  state.signalStrengthOnCurrentTopic = 'none';
+  state.deepProbeAvailable = true;
+  state.deepProbeUsedOnTopic = false;
   const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. This is a quick fifteen-minute call to get a high-level picture of your business — I'll ask a few broad questions across six areas, with no recommendations from me on the call and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
   pushAgent(opener);
   speak(opener, function() { startListening(); });
