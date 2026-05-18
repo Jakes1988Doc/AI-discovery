@@ -504,7 +504,7 @@ function setupRecognition() {
         stopListening();
         captureAnswer(state.finalTranscript);
       }
-    }, 1000);
+    }, 800);
   };
   rec.onerror = function(ev) {
     if (ev.error === 'not-allowed') {
