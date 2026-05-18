@@ -17,7 +17,7 @@ const TOPICS = [
   {
     id: 'tech_stack',
     label: 'Tech stack',
-    opener: "What are the main tools and systems the business runs on day-to-day — things like how you manage customers or jobs, accounting, communications, taking orders, anything like that?",
+    opener: "What are the main tools the business runs on — things like accounting, job management, customer records, communications? And are those systems talking to each other, or is there someone manually moving information between them?",
     probeQuestion: "Is there anything in that list where you feel like you're working around the tool rather than with it — like it doesn't quite do what you need so you've had to add a workaround?",
     deepProbeQuestion: "And when that workaround breaks down — what actually happens? Does work get missed, or does someone have to step in manually each time?",
     moveOnCriteria: "you've heard their core tools and any friction or workarounds",
@@ -67,7 +67,7 @@ const TOPICS = [
   {
     id: 'magic_wand',
     label: 'Magic wand',
-    opener: "Last one — if I could fix one thing in your business tomorrow and it would just work, no cost, no effort on your part — what would it be?",
+    opener: "If you could wave a magic wand and have one thing in your business automated tomorrow, what would it be?",
     probeQuestion: null,
     deepProbeQuestion: null,
     moveOnCriteria: "they've answered",
