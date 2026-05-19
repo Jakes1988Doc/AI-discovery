@@ -142,6 +142,19 @@
     background: var(--cream-2);
     border-color: var(--ink);
   }
+  .btn-outline {
+    background: transparent;
+    color: var(--terracotta);
+    border: 1px solid var(--terracotta-soft);
+    font-size: 0.88rem;
+    padding: 0.6rem 1.1rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+  .btn-outline:hover {
+    background: var(--terracotta-soft);
+    border-color: var(--terracotta);
+  }
   .btn-sm { padding: 0.6rem 1.1rem; font-size: 0.88rem; }
   .btn .arrow { transition: transform 0.2s; font-size: 1.05em; }
   .btn:hover .arrow { transform: translateX(4px); }
@@ -1135,6 +1148,7 @@
         <li>Prioritised list with a single recommended starting point</li>
         <li>Delivered within 48 hours of payment</li>
       </ul>
+      <a href="example/" class="btn btn-outline" target="_blank">View an example roadmap <span class="arrow">→</span></a>
       <p class="price-card-footnote">Only commissioned <em>after</em> the call, if you choose. Fixed fee — no quote process, no haggling.</p>
     </div>
   </div>
