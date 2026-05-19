@@ -1,1 +1,856 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Implementation Roadmap — Hartwell Lane Veterinary Practice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --page:        #fafaf7;
+    --surface:     #f4f4ef;
+    --surface-2:   #eceee8;
+    --border:      rgba(15,23,42,0.10);
+    --border-soft: rgba(15,23,42,0.06);
+    --ink:         #111827;
+    --ink-2:       #374151;
+    --ink-3:       #6b7280;
+    --ink-4:       #9ca3af;
+    --accent:      #c85a3e;
+    --accent-2:    #a3432b;
+    --accent-pale: #fde8e0;
+    --gold:        #b8843a;
+    --gold-pale:   #fef3dc;
+    --sage:        #4a7c59;
+    --sage-pale:   #dceee3;
+    --slate:       #64748b;
+    --slate-pale:  #e2e8f0;
+    --serif: 'DM Serif Display', Georgia, serif;
+    --sans:  'DM Sans', system-ui, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; color-scheme: light; background: #fafaf7; }
+  body {
+    background: #fafaf7 !important;
+    color: #111827 !important;
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* COVER */
+  .cover {
+    background: var(--ink);
+    color: var(--page);
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 3rem 3.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    top: -100px; right: -100px;
+    width: 440px; height: 440px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,90,62,0.2) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .cover-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: relative; z-index: 1;
+  }
+  .cover-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: rgba(250,250,247,0.65);
+  }
+  .cover-logo svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .cover-doc-type {
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    padding: 0.35rem 0.8rem;
+    border: 1px solid rgba(200,90,62,0.4);
+    border-radius: 999px;
+  }
+  .cover-body {
+    position: relative; z-index: 1;
+    padding: 3.5rem 0 2rem;
+    max-width: 740px;
+  }
+  .cover-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(250,250,247,0.45);
+    margin-bottom: 1.1rem;
+  }
+  .cover-title {
+    font-family: var(--serif);
+    font-size: clamp(2.2rem, 4vw, 3.6rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: var(--page);
+    margin-bottom: 1.1rem;
+  }
+  .cover-title em { font-style: italic; color: #f5b8a3; }
+  .cover-subtitle {
+    font-size: 0.97rem;
+    font-weight: 300;
+    color: rgba(250,250,247,0.6);
+    line-height: 1.65;
+    max-width: 560px;
+  }
+  .cover-bottom {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid rgba(250,250,247,0.1);
+    padding-top: 1.5rem;
+  }
+  .cover-meta-item { padding: 0 2rem 0 0; border-right: 1px solid rgba(250,250,247,0.08); }
+  .cover-meta-item:last-child { border-right: none; padding-left: 2rem; padding-right: 0; }
+  .cover-meta-item:not(:first-child):not(:last-child) { padding-left: 2rem; }
+  .cover-meta-label {
+    display: block;
+    font-size: 0.64rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(250,250,247,0.35);
+    margin-bottom: 0.3rem;
+  }
+  .cover-meta-value {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgba(250,250,247,0.88);
+  }
+
+  /* SHELL */
+  .doc-shell {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  /* SIDEBAR */
+  .doc-nav {
+    padding: 3rem 0 3rem 2rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+  .doc-nav-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-4);
+    margin-bottom: 1.1rem;
+    padding-left: 1rem;
+  }
+  .doc-nav ul { list-style: none; display: flex; flex-direction: column; gap: 0.1rem; }
+  .doc-nav a {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .doc-nav a:hover { background: var(--surface); color: var(--ink); border-left-color: var(--accent); }
+  .nav-num { font-size: 0.62rem; font-weight: 600; color: var(--accent); min-width: 16px; }
+
+  /* MAIN */
+  .doc-main { padding: 4rem 3.5rem 6rem; max-width: 800px; }
+
+  /* SECTIONS */
+  .doc-section { margin-bottom: 5rem; padding-bottom: 5rem; border-bottom: 1px solid var(--border); }
+  .doc-section:last-child { border-bottom: none; }
+
+  .section-label { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 1.1rem; }
+  .section-num { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); }
+  .section-rule { flex: 1; height: 1px; background: var(--border); }
+
+  .doc-section h2 {
+    font-family: var(--serif);
+    font-size: clamp(1.65rem, 2.8vw, 2.25rem);
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.012em;
+    color: #111827 !important;
+    margin-bottom: 0.5rem;
+  }
+  .doc-section h2 em { font-style: italic; color: var(--accent); }
+  .doc-section h3 { font-size: 0.95rem; font-weight: 600; color: var(--ink-2); margin: 2rem 0 0.65rem; letter-spacing: -0.005em; }
+
+  .section-intro { font-size: 0.97rem; font-weight: 300; color: var(--ink-3); line-height: 1.7; margin-bottom: 1.75rem; max-width: 580px; }
+
+  p { color: var(--ink-2); line-height: 1.75; margin-bottom: 1rem; font-size: 0.95rem; }
+  p:last-child { margin-bottom: 0; }
+
+  /* EXEC CALLOUT */
+  .exec-callout {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 1.85rem 2.1rem;
+    border-left: 3px solid var(--accent);
+  }
+  .exec-callout p { font-size: 0.95rem; color: var(--ink-2); }
+  .exec-callout p strong { color: var(--ink); font-weight: 600; }
+  .exec-callout p + p { margin-top: 0.8rem; }
+
+  /* STAT ROW */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+  .stat-card { background: var(--surface); padding: 1.4rem 1.2rem; }
+  .stat-val {
+    font-family: var(--serif);
+    font-size: 2.25rem;
+    font-weight: 400;
+    color: var(--ink);
+    line-height: 1;
+    margin-bottom: 0.45rem;
+    letter-spacing: -0.02em;
+  }
+  .stat-val em { font-size: 1.1rem; color: var(--accent); font-style: italic; }
+  .stat-desc { font-size: 0.76rem; color: var(--ink-3); line-height: 1.45; }
+
+  /* PAIN LIST */
+  .pain-list {
+    list-style: none;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .pain-item {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+  }
+  .pain-item:last-child { border-bottom: none; }
+  .pain-item:hover { background: var(--surface); }
+  .pain-index {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 1.25rem 0;
+    font-family: var(--serif);
+    font-size: 0.82rem;
+    font-style: italic;
+    color: var(--ink-4);
+    border-right: 1px solid var(--border);
+  }
+  .pain-body { padding: 1.2rem 1.4rem; }
+  .pain-title { font-size: 0.93rem; font-weight: 600; color: var(--ink); margin-bottom: 0.3rem; }
+  .pain-detail { font-size: 0.83rem; color: var(--ink-3); line-height: 1.6; }
+  .pain-quote {
+    margin-top: 0.6rem;
+    padding: 0.55rem 0.8rem;
+    background: var(--accent-pale);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--accent-2);
+    font-style: italic;
+    line-height: 1.55;
+  }
+
+  /* MATRIX */
+  .matrix-wrap {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 1.75rem;
+    background: var(--surface);
+  }
+  .matrix-container {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    grid-template-rows: 1fr 32px;
+    aspect-ratio: 1.35 / 1;
+  }
+  .y-label { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: center; }
+  .y-label-text {
+    transform: rotate(-90deg);
+    white-space: nowrap;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+    display: flex; align-items: center; gap: 0.35rem;
+  }
+  .x-label {
+    grid-column: 2; grid-row: 2;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-4); gap: 0.45rem; padding-top: 0.65rem;
+  }
+  .axis-arrow { color: var(--accent); }
+  .matrix-grid {
+    grid-column: 2; grid-row: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0.65rem;
+  }
+  .quadrant {
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    overflow: hidden;
+  }
+  .quadrant::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    border-radius: 10px 10px 0 0;
+  }
+  .q-challenges { background: rgba(184,132,58,0.07); border: 1px solid rgba(184,132,58,0.2); }
+  .q-challenges::before { background: var(--gold); }
+  .q-wins { background: rgba(74,124,89,0.07); border: 1px solid rgba(74,124,89,0.2); }
+  .q-wins::before { background: var(--sage); }
+  .q-low { background: rgba(100,116,139,0.06); border: 1px solid rgba(100,116,139,0.18); }
+  .q-low::before { background: var(--slate); }
+  .q-fillins { background: rgba(200,90,62,0.06); border: 1px solid rgba(200,90,62,0.18); }
+  .q-fillins::before { background: var(--accent); }
+  .q-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; padding-bottom: 0.55rem; border-bottom: 1px dashed rgba(15,23,42,0.09); }
+  .q-title { font-size: 0.82rem; font-weight: 600; color: var(--ink); margin-bottom: 0.08rem; }
+  .q-sub { font-size: 0.65rem; color: var(--ink-4); }
+  .q-badge { font-size: 0.58rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.18rem 0.45rem; border-radius: 999px; flex-shrink: 0; }
+  .q-challenges .q-badge { background: var(--gold-pale); color: var(--gold); }
+  .q-wins .q-badge { background: var(--sage-pale); color: var(--sage); }
+  .q-low .q-badge { background: var(--slate-pale); color: var(--slate); }
+  .q-fillins .q-badge { background: var(--accent-pale); color: var(--accent-2); }
+  .q-items { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
+  .q-item { font-size: 0.72rem; color: var(--ink-2); line-height: 1.4; padding-left: 0.85rem; position: relative; }
+  .q-item::before { content: ''; position: absolute; left: 0; top: 6px; width: 4px; height: 4px; border-radius: 50%; }
+  .q-challenges .q-item::before { background: var(--gold); }
+  .q-wins .q-item::before { background: var(--sage); }
+  .q-low .q-item::before { background: var(--slate); }
+  .q-fillins .q-item::before { background: var(--accent); }
+
+  /* STARTING POINT */
+  .starting-card {
+    background: var(--ink);
+    color: var(--page);
+    border-radius: 18px;
+    padding: 2.5rem 2.75rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .starting-card::before {
+    content: '';
+    position: absolute;
+    bottom: -50px; right: -50px;
+    width: 280px; height: 280px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,90,62,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .starting-card > * { position: relative; z-index: 1; }
+  .starting-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #f5b8a3;
+    margin-bottom: 0.85rem;
+  }
+  .starting-tag::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .starting-card h3 {
+    font-family: var(--serif);
+    font-size: 1.65rem;
+    font-weight: 400;
+    line-height: 1.2;
+    color: var(--page);
+    margin-bottom: 1rem;
+    letter-spacing: -0.01em;
+  }
+  .starting-card p { color: rgba(250,250,247,0.75); font-size: 0.93rem; line-height: 1.7; }
+  .starting-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    margin: 1.6rem 0;
+    padding: 1.4rem 0;
+    border-top: 1px solid rgba(250,250,247,0.1);
+    border-bottom: 1px solid rgba(250,250,247,0.1);
+  }
+  .s-stat { padding: 0 1.4rem 0 0; }
+  .s-stat:not(:first-child) { padding-left: 1.4rem; border-left: 1px solid rgba(250,250,247,0.1); }
+  .s-stat-label { display: block; font-size: 0.62rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: rgba(250,250,247,0.35); margin-bottom: 0.3rem; }
+  .s-stat-value { display: block; font-family: var(--serif); font-size: 1.2rem; color: var(--page); line-height: 1.2; }
+
+  /* PHASES */
+  .phases { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .phase { display: grid; grid-template-columns: 105px 1fr; border-bottom: 1px solid var(--border); }
+  .phase:last-child { border-bottom: none; }
+  .phase-marker {
+    padding: 1.6rem 1.1rem;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .phase-num { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; }
+  .phase-1 .phase-num { color: var(--accent); }
+  .phase-2 .phase-num { color: var(--gold); }
+  .phase-3 .phase-num { color: var(--sage); }
+  .phase-time { font-family: var(--serif); font-size: 1rem; color: var(--ink); line-height: 1.25; }
+  .phase-body { padding: 1.6rem 1.85rem; }
+  .phase-body h4 { font-size: 0.93rem; font-weight: 600; color: var(--ink); margin-bottom: 0.35rem; }
+  .phase-body > p { font-size: 0.85rem; color: var(--ink-3); margin-bottom: 0.75rem; }
+  .phase-tasks { list-style: none; display: flex; flex-direction: column; gap: 0.28rem; }
+  .phase-tasks li { font-size: 0.83rem; color: var(--ink-2); padding-left: 1.1rem; position: relative; line-height: 1.5; }
+  .phase-tasks li::before { content: '→'; position: absolute; left: 0; font-weight: 600; }
+  .phase-1 .phase-tasks li::before { color: var(--accent); }
+  .phase-2 .phase-tasks li::before { color: var(--gold); }
+  .phase-3 .phase-tasks li::before { color: var(--sage); }
+
+  /* CAVEATS */
+  .caveat-list { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; }
+  .caveat {
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 0.9rem;
+    padding: 1.2rem 1.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .caveat-icon {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--gold-pale);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700; color: var(--gold);
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .caveat-title { font-size: 0.9rem; font-weight: 600; color: var(--ink); margin-bottom: 0.28rem; }
+  .caveat-body { font-size: 0.83rem; color: var(--ink-3); line-height: 1.65; }
+
+  /* FOOTER */
+  .doc-footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 1.75rem 3.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+  .footer-logo { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 500; color: var(--ink-3); }
+  .footer-logo svg { width: 17px; height: 17px; }
+  .footer-note { font-size: 0.73rem; color: var(--ink-4); line-height: 1.55; text-align: right; max-width: 500px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 860px) {
+    .doc-shell { grid-template-columns: 1fr; }
+    .doc-nav { display: none; }
+    .doc-main { padding: 2.5rem 1.5rem 4rem; max-width: 100%; }
+    .cover { padding: 2.5rem 1.5rem; }
+    .cover-bottom { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+    .cover-meta-item { border-right: none; padding: 0; }
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .starting-stats { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .s-stat { padding: 0; border-left: none !important; }
+    .phase { grid-template-columns: 1fr; }
+    .phase-marker { border-right: none; border-bottom: 1px solid var(--border); padding: 1.1rem 1.4rem; flex-direction: row; align-items: center; gap: 0.75rem; }
+    .matrix-container { grid-template-columns: 22px 1fr; grid-template-rows: 1fr 26px; aspect-ratio: 1 / 1.25; }
+    .starting-card { padding: 2rem 1.5rem; }
+    .starting-card h3 { font-size: 1.35rem; }
+    .doc-footer { padding: 1.5rem; flex-direction: column; align-items: flex-start; }
+    .footer-note { text-align: left; }
+  }
+
+  @media print {
+    .doc-nav { display: none; }
+    .doc-shell { grid-template-columns: 1fr; }
+    .doc-main { padding: 2rem; max-width: 100%; }
+    .doc-section { page-break-inside: avoid; }
+    .cover { padding: 2rem; min-height: auto; }
+    .doc-footer { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-top">
+    <div class="cover-logo">
+      <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="13" fill="#fafaf7"/>
+        <path d="M9 17 L14 9 L19 17" stroke="#111827" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14" cy="14" r="2" fill="#c85a3e"/>
+      </svg>
+      AI Growth Catalyst
+    </div>
+    <span class="cover-doc-type">Bespoke AI Roadmap</span>
+  </div>
+
+  <div class="cover-body">
+    <p class="cover-eyebrow">AI Implementation Analysis · May 2026</p>
+    <h1 class="cover-title">Where AI <em>actually</em> fits at Hartwell Lane Veterinary Practice.</h1>
+    <p class="cover-subtitle">A focused analysis of where AI could genuinely help — and where it shouldn't — based on the discovery call held on 4 May 2026.</p>
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Prepared for</span>
+      <span class="cover-meta-value">Dr Sarah Hartwell</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Business</span>
+      <span class="cover-meta-value">Hartwell Lane Veterinary</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Date</span>
+      <span class="cover-meta-value">May 2026</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Prepared by</span>
+      <span class="cover-meta-value">AI Growth Catalyst</span>
+    </div>
+  </div>
+</div>
+
+<!-- DOCUMENT -->
+<div class="doc-shell">
+
+  <nav class="doc-nav">
+    <p class="doc-nav-label">Contents</p>
+    <ul>
+      <li><a href="#exec-summary"><span class="nav-num">01</span> Executive summary</a></li>
+      <li><a href="#business"><span class="nav-num">02</span> Business overview</a></li>
+      <li><a href="#pain-points"><span class="nav-num">03</span> Pain points</a></li>
+      <li><a href="#matrix"><span class="nav-num">04</span> Priority matrix</a></li>
+      <li><a href="#starting-point"><span class="nav-num">05</span> Where to start</a></li>
+      <li><a href="#phases"><span class="nav-num">06</span> Implementation</a></li>
+      <li><a href="#caveats"><span class="nav-num">07</span> Honest caveats</a></li>
+    </ul>
+  </nav>
+
+  <main class="doc-main">
+
+    <!-- 01 -->
+    <section class="doc-section" id="exec-summary">
+      <div class="section-label"><span class="section-num">01</span><span class="section-rule"></span></div>
+      <h2>Executive summary</h2>
+      <p class="section-intro">The headline findings from the discovery call.</p>
+      <div class="exec-callout">
+        <p>Hartwell Lane Veterinary Practice is a well-established 12-person independent practice with a strong clinical reputation, but operational friction caused by a legacy practice management system, no-show rates costing approximately £800/month, and approximately 16 hours per week of administrative work that could be substantially reduced through targeted automation.</p>
+        <p>This roadmap identifies <strong>11 specific automation opportunities</strong> across your operations, prioritised against impact and ease of implementation. Three are flagged as immediate quick wins; three as strategic challenges worth planning for; the remainder are low-priority or fill-ins.</p>
+        <p><strong>The single highest-value starting point is automated appointment reminders</strong> — addressing the no-show issue you flagged as your most pressing weekly frustration, with minimal disruption to existing workflows and an operational timeline of 3–5 days.</p>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section class="doc-section" id="business">
+      <div class="section-label"><span class="section-num">02</span><span class="section-rule"></span></div>
+      <h2>Business overview</h2>
+      <p class="section-intro">A summary of how the practice operates today, based on the discovery call.</p>
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-val">12</div>
+          <div class="stat-desc">Team members — 3 vets, 4 nurses, 3 reception, 2 admin</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">~120</div>
+          <div class="stat-desc">Appointments per week across all clinicians</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">28<em>yrs</em></div>
+          <div class="stat-desc">Established 1998 — strong local reputation</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">~16<em>hrs</em></div>
+          <div class="stat-desc">Estimated weekly admin that could be reduced</div>
+        </div>
+      </div>
+      <h3>Current systems &amp; tools</h3>
+      <p>The practice runs on a legacy management system in use since 2008 that handles patient records, appointments, and basic billing, but lacks API access and modern integrations. Insurance claims are processed manually via individual insurer portals. Marketing is handled via Mailchimp and Instagram, managed by reception. No CRM beyond what the existing system provides.</p>
+    </section>
+
+    <!-- 03 -->
+    <section class="doc-section" id="pain-points">
+      <div class="section-label"><span class="section-num">03</span><span class="section-rule"></span></div>
+      <h2>Identified <em>pain points</em></h2>
+      <p class="section-intro">The operational frustrations described during the call, ranked by impact on the business.</p>
+      <ul class="pain-list">
+        <li class="pain-item">
+          <span class="pain-index">01</span>
+          <div class="pain-body">
+            <div class="pain-title">No-shows costing ~£800/month</div>
+            <div class="pain-detail">Approximately 8–10 missed appointments per week, predominantly first-time clients booking online. No automated reminder system in place.</div>
+            <div class="pain-quote">"It's the single most annoying thing about my week — I lose count of how many empty slots we get."</div>
+          </div>
+        </li>
+        <li class="pain-item">
+          <span class="pain-index">02</span>
+          <div class="pain-body">
+            <div class="pain-title">Insurance claims eating 4 hours/week</div>
+            <div class="pain-detail">Each claim manually entered into the relevant insurer's portal. Multiple insurers, different formats, frequent re-submissions due to missing details.</div>
+          </div>
+        </li>
+        <li class="pain-item">
+          <span class="pain-index">03</span>
+          <div class="pain-body">
+            <div class="pain-title">Reception overwhelmed by triage calls</div>
+            <div class="pain-detail">Reception handles all incoming enquiries — assessing urgency, gathering pet details, deciding routing. Estimated 20+ calls per day, often interrupting other work.</div>
+          </div>
+        </li>
+        <li class="pain-item">
+          <span class="pain-index">04</span>
+          <div class="pain-body">
+            <div class="pain-title">Clinical notes written after-hours</div>
+            <div class="pain-detail">Vets routinely stay 30–60 minutes past clinic close to write up notes. Unpaid time and a source of burnout flagged by all three clinicians.</div>
+          </div>
+        </li>
+        <li class="pain-item">
+          <span class="pain-index">05</span>
+          <div class="pain-body">
+            <div class="pain-title">Prescription refills handled reactively</div>
+            <div class="pain-detail">No system to flag clients due for repeat scripts. Owners often run out before remembering to call — preventable lost revenue and gaps in pet medication.</div>
+          </div>
+        </li>
+        <li class="pain-item">
+          <span class="pain-index">06</span>
+          <div class="pain-body">
+            <div class="pain-title">No visibility on practice performance</div>
+            <div class="pain-detail">Owner has a rough sense of whether the week was busy but no consolidated view of revenue trends, top-performing services, or capacity utilisation.</div>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- 04 -->
+    <section class="doc-section" id="matrix">
+      <div class="section-label"><span class="section-num">04</span><span class="section-rule"></span></div>
+      <h2>Priority <em>matrix</em></h2>
+      <p class="section-intro">Each opportunity plotted against ease of implementation and potential impact on the practice.</p>
+      <div class="matrix-wrap">
+        <div class="matrix-container">
+          <div class="y-label">
+            <span class="y-label-text"><span>Low</span><span class="axis-arrow">←</span><span>High Impact</span></span>
+          </div>
+          <div class="matrix-grid">
+            <div class="quadrant q-challenges">
+              <div class="q-header">
+                <div><div class="q-title">Challenges</div><div class="q-sub">High impact · Difficult</div></div>
+                <span class="q-badge">Plan</span>
+              </div>
+              <ul class="q-items">
+                <li class="q-item">PMS migration to modern platform</li>
+                <li class="q-item">AI-assisted clinical note drafting</li>
+                <li class="q-item">Insurance claims auto-submission</li>
+              </ul>
+            </div>
+            <div class="quadrant q-wins">
+              <div class="q-header">
+                <div><div class="q-title">Quick Wins</div><div class="q-sub">High impact · Easy</div></div>
+                <span class="q-badge">Do first</span>
+              </div>
+              <ul class="q-items">
+                <li class="q-item">Automated appointment reminders</li>
+                <li class="q-item">AI triage for new enquiries</li>
+                <li class="q-item">Prescription refill reminders</li>
+              </ul>
+            </div>
+            <div class="quadrant q-low">
+              <div class="q-header">
+                <div><div class="q-title">Low Priority</div><div class="q-sub">Low impact · Difficult</div></div>
+                <span class="q-badge">Avoid</span>
+              </div>
+              <ul class="q-items">
+                <li class="q-item">Custom client mobile app</li>
+                <li class="q-item">AI symptom-checker for owners</li>
+              </ul>
+            </div>
+            <div class="quadrant q-fillins">
+              <div class="q-header">
+                <div><div class="q-title">Fill-ins</div><div class="q-sub">Low impact · Easy</div></div>
+                <span class="q-badge">If time</span>
+              </div>
+              <ul class="q-items">
+                <li class="q-item">AI-drafted social media posts</li>
+                <li class="q-item">Auto-summarised meeting notes</li>
+                <li class="q-item">Auto-generated newsletter</li>
+              </ul>
+            </div>
+          </div>
+          <div class="x-label"><span>Difficult</span><span class="axis-arrow">→</span><span>Easy</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 -->
+    <section class="doc-section" id="starting-point">
+      <div class="section-label"><span class="section-num">05</span><span class="section-rule"></span></div>
+      <h2>Recommended <em>starting point</em></h2>
+      <p class="section-intro">If you do nothing else from this roadmap, do this.</p>
+      <div class="starting-card">
+        <p class="starting-tag">Quick Win #1</p>
+        <h3>Automated appointment reminders via SMS and WhatsApp.</h3>
+        <p>This single change addresses the no-show issue you flagged as your most pressing weekly frustration. A simple automation sends a reminder 24 hours before each appointment, with a one-tap confirm or reschedule. Industry data suggests a 40–60% reduction in no-shows.</p>
+        <div class="starting-stats">
+          <div class="s-stat"><span class="s-stat-label">Time to live</span><span class="s-stat-value">3–5 days</span></div>
+          <div class="s-stat"><span class="s-stat-label">Estimated saving</span><span class="s-stat-value">~£400/mo</span></div>
+          <div class="s-stat"><span class="s-stat-label">Team effort</span><span class="s-stat-value">~2 hours</span></div>
+          <div class="s-stat"><span class="s-stat-label">Workflow disruption</span><span class="s-stat-value">None</span></div>
+        </div>
+        <p>No system change to the PMS itself. If it doesn't deliver, it's removable in an afternoon. That's why it's the right place to start.</p>
+      </div>
+    </section>
+
+    <!-- 06 -->
+    <section class="doc-section" id="phases">
+      <div class="section-label"><span class="section-num">06</span><span class="section-rule"></span></div>
+      <h2>Implementation <em>phases</em></h2>
+      <p class="section-intro">A realistic sequence for tackling the rest of the roadmap around a busy clinical schedule.</p>
+      <div class="phases">
+        <div class="phase phase-1">
+          <div class="phase-marker">
+            <p class="phase-num">Phase 1</p>
+            <p class="phase-time">Weeks 1–4</p>
+          </div>
+          <div class="phase-body">
+            <h4>Foundation — Quick Wins</h4>
+            <p>Tackle all three Quick Wins. They share infrastructure and build momentum without disrupting clinical operations.</p>
+            <ul class="phase-tasks">
+              <li>Week 1: Automated appointment reminders (live by end of week)</li>
+              <li>Weeks 2–3: AI triage bot deployed alongside existing reception</li>
+              <li>Week 4: Prescription refill auto-reminders</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase phase-2">
+          <div class="phase-marker">
+            <p class="phase-num">Phase 2</p>
+            <p class="phase-time">Months 2–4</p>
+          </div>
+          <div class="phase-body">
+            <h4>Strategic — Challenges</h4>
+            <p>With Phase 1 stable, plan the larger structural improvements. These require more discussion and investment but offer significant returns.</p>
+            <ul class="phase-tasks">
+              <li>PMS evaluation — shortlist 3 modern alternatives, pilot with one vet</li>
+              <li>Insurance claims automation — pilot with one insurer first</li>
+              <li>AI clinical note drafting — validated with a vet sign-off process</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase phase-3">
+          <div class="phase-marker">
+            <p class="phase-num">Phase 3</p>
+            <p class="phase-time">Months 5–6</p>
+          </div>
+          <div class="phase-body">
+            <h4>Optimisation — Fill-ins</h4>
+            <p>Once core operations are running smoothly, add the smaller automations to fill spare capacity.</p>
+            <ul class="phase-tasks">
+              <li>AI-drafted social media content</li>
+              <li>Auto-summarised team meeting notes</li>
+              <li>Quarterly newsletter automation</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 -->
+    <section class="doc-section" id="caveats">
+      <div class="section-label"><span class="section-num">07</span><span class="section-rule"></span></div>
+      <h2>Honest <em>caveats</em></h2>
+      <p class="section-intro">Things to be aware of before implementing any of this. We flag these upfront because they matter.</p>
+      <ul class="caveat-list">
+        <li class="caveat">
+          <div class="caveat-icon">!</div>
+          <div>
+            <div class="caveat-title">AI clinical note drafting needs careful validation.</div>
+            <div class="caveat-body">This is the highest-risk item on the roadmap. Mistakes in clinical notes have legal and patient-safety consequences. A vet sign-off step on every AI-generated note is non-negotiable for at least the first 3 months.</div>
+          </div>
+        </li>
+        <li class="caveat">
+          <div class="caveat-icon">!</div>
+          <div>
+            <div class="caveat-title">The PMS migration is genuinely difficult.</div>
+            <div class="caveat-body">Your system has 18 years of patient records. Migration involves real risk of data loss, downtime, and team retraining. Budget 6–12 months and external help. Don't attempt this DIY.</div>
+          </div>
+        </li>
+        <li class="caveat">
+          <div class="caveat-icon">!</div>
+          <div>
+            <div class="caveat-title">Don't automate empathy.</div>
+            <div class="caveat-body">Bereavement support, end-of-life decisions, anxious owners — these should never be touched by automation. AI handles the routine so your team has more time for the moments that genuinely matter.</div>
+          </div>
+        </li>
+        <li class="caveat">
+          <div class="caveat-icon">!</div>
+          <div>
+            <div class="caveat-title">The estimated savings are projections, not guarantees.</div>
+            <div class="caveat-body">The ~£400/month saving from appointment reminders is based on industry averages and your reported no-show rate. Track actual results for 60 days and adjust expectations accordingly.</div>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+
+<!-- FOOTER -->
+<footer class="doc-footer">
+  <div class="footer-logo">
+    <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="14" cy="14" r="13" fill="#111827"/>
+      <path d="M9 17 L14 9 L19 17" stroke="#fafaf7" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="14" cy="14" r="2" fill="#c85a3e"/>
+    </svg>
+    AI Growth Catalyst
+  </div>
+  <p class="footer-note">Prepared May 2026 · For the sole use of Hartwell Lane Veterinary Practice · No part of this document constitutes legal, medical, or financial advice.</p>
+</footer>
+
+</body>
+</html>
