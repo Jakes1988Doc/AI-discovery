@@ -864,6 +864,92 @@
     line-height: 1.6;
   }
 
+  /* ============= TEAM ============= */
+  .team-section {
+    padding: 7rem 1.5rem;
+    max-width: 1100px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+  .team-card {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 3rem;
+    align-items: start;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 2.5rem 3rem;
+    box-shadow: 0 2px 16px rgba(15, 23, 42, 0.05);
+  }
+  .team-photo {
+    width: 200px;
+    height: 200px;
+    border-radius: 16px;
+    background: var(--cream-2);
+    border: 1px solid var(--cream-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .team-photo-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink-faint);
+  }
+  .team-photo-placeholder svg { opacity: 0.5; }
+  .team-photo-placeholder span { font-size: 0.75rem; text-align: center; line-height: 1.4; max-width: 120px; }
+  .team-bio-name {
+    font-size: 1.45rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 0.25rem;
+  }
+  .team-bio-title {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--terracotta);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 1.25rem;
+  }
+  .team-bio-body {
+    font-size: 1rem;
+    color: var(--ink-dim);
+    line-height: 1.7;
+    max-width: 580px;
+  }
+  .team-bio-body p + p { margin-top: 0.85rem; }
+  .team-credentials {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+  }
+  .credential-pill {
+    background: var(--cream-2);
+    border: 1px solid var(--cream-3);
+    border-radius: 100px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 720px) {
+    .team-card {
+      grid-template-columns: 1fr;
+      padding: 1.75rem 1.5rem;
+      gap: 1.75rem;
+    }
+    .team-photo { width: 120px; height: 120px; }
+  }
+
   /* ============= FINAL CTA ============= */
   .final-cta {
     text-align: center;
@@ -932,9 +1018,10 @@
     <span>AI Growth Catalyst</span>
   </a>
   <div class="nav-links">
+    <a href="#team">Our team</a>
+    <a href="#case-study">Recent work</a>
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
-    <a href="#case-study">Recent work</a>
     <a href="#faq">FAQ</a>
     <a href="call/" class="btn btn-primary btn-sm">Start a call <span class="arrow">→</span></a>
   </div>
@@ -1059,7 +1146,7 @@
         <h4>Customer interactions</h4>
         <p>How you handle inquiries, support, and follow-ups</p>
       </div>
-      <div class="topic-tile">
+      <div class="topic-tile" style="grid-column: 2;">
         <span class="topic-num">vii</span>
         <h4>Priorities &amp; goals</h4>
         <p>The one thing you'd automate tomorrow if you could</p>
@@ -1154,11 +1241,31 @@
   </div>
 </section>
 
+<!-- ============= TEAM ============= -->
+<section id="team">
+  <div class="team-section">
+    <p class="section-eyebrow" style="text-align:left;">Our team</p>
+    <h2 class="section-title" style="text-align:left;">A <em>real person</em> behind the roadmap.</h2>
+    <p class="section-sub" style="text-align:left; margin-bottom:3rem;">Every discovery call and roadmap is handled by a qualified management accountant with a decade of hands-on experience helping businesses run leaner and grow faster — now applying AI to the same problems.</p>
+
+    <div class="team-card" style="grid-template-columns:1fr;">
+      <div class="team-bio">
+        <p class="team-bio-name">Chris Jacobs</p>
+        <p class="team-bio-title">Founder &amp; AI Growth Consultant</p>
+        <div class="team-bio-body">
+          <p>Chris is a Chartered Management Accountant (ACMA, CGMA) with over a decade of experience advising businesses on performance improvement, cash efficiency, and operational optimisation. His background spans senior roles across Big 4 consulting, boutique advisory, and multinational in-house finance — working with leadership teams across multiple industries.</p>
+          <p>Where he used to solve these problems manually, he now applies AI to get there faster. AI Growth Catalyst exists to give small and medium-sized businesses access to the same structured thinking that larger firms pay consultants a lot of money for — at a price that makes sense for a business your size.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============= CASE STUDY ============= -->
 <section id="case-study">
-  <p class="section-eyebrow">Recent work</p>
-  <h2 class="section-title">A <em>WhatsApp ordering bot</em> for a meat delivery business.</h2>
-  <p class="section-sub">A real example of what an AI roadmap looks like once it's built. Names withheld for client confidentiality.</p>
+  <p class="section-eyebrow" style="text-align:left;">Recent work</p>
+  <h2 class="section-title" style="text-align:left;">A <em>WhatsApp ordering bot</em> for a meat delivery business.</h2>
+  <p class="section-sub" style="text-align:left;">A real example of what an AI roadmap looks like once it's built. Names withheld for client confidentiality.</p>
 
   <div class="case-study-card">
     <div class="case-study-meta">
