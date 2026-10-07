@@ -11,7 +11,7 @@
 <link rel="alternate icon" href="favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 
 <style>
   :root {
@@ -36,7 +36,7 @@
   body {
     background: var(--cream);
     color: var(--ink);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -170,10 +170,11 @@
   }
 
   h1 {
-    font-size: clamp(2.4rem, 6vw, 4.8rem);
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: clamp(2.8rem, 7vw, 5.5rem);
     font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
+    line-height: 1.0;
+    letter-spacing: -0.01em;
     margin-bottom: 1.75rem;
     animation: fadeInUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
   }
@@ -197,13 +198,14 @@
     transform: skewX(-3deg);
   }
   .hero-bridge {
-    font-size: clamp(1.15rem, 2.2vw, 1.5rem);
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: clamp(1.35rem, 2.5vw, 1.8rem);
     color: var(--ink);
     max-width: 640px;
     margin: 0 auto 1.5rem;
-    line-height: 1.4;
-    font-weight: 400;
-    letter-spacing: -0.01em;
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: 0;
     animation: fadeInUp 0.95s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
   }
   .hero-bridge em {
@@ -266,12 +268,13 @@
     margin-bottom: 1rem;
   }
   .section-title {
+    font-family: 'Cormorant Garamond', Georgia, serif;
     text-align: center;
-    font-size: clamp(1.85rem, 3.8vw, 2.8rem);
+    font-size: clamp(2.1rem, 4.5vw, 3.4rem);
     font-weight: 700;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.01em;
     margin-bottom: 1.25rem;
-    line-height: 1.1;
+    line-height: 1.08;
   }
   .section-title em {
     font-style: italic;
