@@ -257,35 +257,93 @@ Respond with JSON only.`;
 });
 
 // ============================================================
+const NOTES_TOOL = {
+  name: 'record_notes',
+  description: 'Record the structured internal notes for this discovery call.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      executiveSummary: { type: 'string' },
+      businessOverview: { type: 'string' },
+      currentSystems: { type: 'array', items: { type: 'string' } },
+      manualWork: { type: 'array', items: { type: 'string' } },
+      painPoints: { type: 'array', items: { type: 'string' } },
+      customerInteractions: { type: 'string' },
+      priorities: { type: 'array', items: { type: 'string' } },
+      clientAutomationHypotheses: { type: 'array', items: { type: 'string' } },
+      automationOpportunities: { type: 'array', items: { type: 'string' } },
+      redFlags: { type: 'array', items: { type: 'string' } },
+      notableQuotes: { type: 'array', items: { type: 'string' } },
+      suggestedFirstFocus: { type: 'string' },
+      fitAssessment: { type: 'string' },
+      shouldOfferRoadmap: { type: 'string' }
+    },
+    required: ['executiveSummary', 'suggestedFirstFocus', 'fitAssessment', 'shouldOfferRoadmap']
+  }
+};
+
 async function generateInternalNotes(transcript, clientName, businessName) {
   const transcriptText = transcript.map(t => {
     const role = t.role === 'agent' ? 'AGENT' : 'CLIENT';
     return role + ': ' + t.text;
   }).join('\n\n');
 
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 3000,
-      system: INTERNAL_NOTES_PROMPT,
-      messages: [{ role: 'user', content: `Client: ${clientName}\nBusiness: ${businessName}\n\nTRANSCRIPT:\n\n${transcriptText}\n\nReturn JSON only.` }]
-    })
-  });
-  if (!r.ok) throw new Error('Notes API failed: ' + r.status);
-  const data = await r.json();
-  const text = data.content.filter(c => c.type === 'text').map(c => c.text).join('').trim();
-  const cleaned = text.replace(/```json\s*|\s*```/g, '').trim();
-  return JSON.parse(cleaned);
+  const models = [process.env.NOTES_MODEL || 'claude-sonnet-5-5', 'claude-haiku-4-5-20251001'];
+  let lastErr = 'no model tried';
+  for (const model of models) {
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 6000,
+          system: INTERNAL_NOTES_PROMPT,
+          tools: [NOTES_TOOL],
+          tool_choice: { type: 'tool', name: 'record_notes' },
+          messages: [{ role: 'user', content: `Client: ${clientName}\nBusiness: ${businessName}\n\nTRANSCRIPT:\n\n${transcriptText}\n\nCall the record_notes tool with your notes.` }]
+        })
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        lastErr = 'Notes API ' + model + ' ' + r.status + ': ' + body.slice(0, 200);
+        console.error(lastErr);
+        continue;
+      }
+      const data = await r.json();
+      if (data.stop_reason === 'max_tokens') console.error('Notes reply hit max_tokens on ' + model);
+      const tool = (data.content || []).find(c => c.type === 'tool_use' && c.name === 'record_notes');
+      if (tool && tool.input && typeof tool.input === 'object') return tool.input;
+      throw new Error('no tool_use block in reply (stop_reason ' + data.stop_reason + ')');
+    } catch (err) {
+      lastErr = 'Notes ' + model + ' failed: ' + err.message;
+      console.error(lastErr);
+    }
+  }
+  throw new Error(lastErr);
 }
 
 // ============================================================
-function buildInternalNotesDocx(notes, meta) {
+function toText(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') return Object.values(v).map(toText).filter(Boolean).join(' — ');
+  return String(v);
+}
+function normaliseNotes(n) {
+  const out = {};
+  Object.keys(n || {}).forEach(function(k) {
+    const v = n[k];
+    out[k] = Array.isArray(v) ? v.map(toText).filter(Boolean) : toText(v);
+  });
+  return out;
+}
+function buildInternalNotesDocx(rawNotes, meta) {
+  const notes = normaliseNotes(rawNotes);
   const { clientName, businessName, email, dateStr, durationStr } = meta;
 
   const heading = (text) => new Paragraph({
@@ -446,17 +504,19 @@ async function sendClientAcknowledgement(toEmail, clientName, businessName) {
   if (!r.ok) {
     const errText = await r.text();
     console.error('Client ack email error', r.status, errText);
-    throw new Error('Client email failed: ' + r.status);
+    throw new Error('Client email failed: ' + r.status + ' ' + errText.slice(0, 200));
   }
   return await r.json();
 }
 
 // ============================================================
-async function sendInternalNotes(clientName, businessName, clientEmail, docBuffer, shouldOffer) {
+async function sendInternalNotes(clientName, businessName, clientEmail, docBuffer, shouldOffer, opts) {
   if (!RESEND_API_KEY || !BCC_EMAIL) return { skipped: true };
+  const ext = (opts && opts.ext) || 'docx';
+  const extra = (opts && opts.extraHtml) || '';
   const filename = 'discovery-notes-' +
     (businessName || 'call').replace(/[^a-z0-9]+/gi, '-').toLowerCase() +
-    '-' + new Date().toISOString().slice(0, 10) + '.docx';
+    '-' + new Date().toISOString().slice(0, 10) + '.' + ext;
   const offerHint = shouldOffer ? `<p><strong>Offer £350 roadmap?</strong> ${shouldOffer}</p>` : '';
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -465,14 +525,14 @@ async function sendInternalNotes(clientName, businessName, clientEmail, docBuffe
       from: FROM_EMAIL,
       to: [BCC_EMAIL],
       subject: '[Internal] New discovery call: ' + businessName + ' (' + clientName + ')',
-      html: `<div style="font-family: -apple-system, sans-serif;"><p>New discovery call completed. Action: review notes, decide whether to offer the £350 roadmap within 24 hours.</p><p><strong>Client:</strong> ${clientName}<br/><strong>Business:</strong> ${businessName}<br/><strong>Email:</strong> ${clientEmail}</p>${offerHint}<p>Full notes attached.</p></div>`,
+      html: `<div style="font-family: -apple-system, sans-serif;">${extra}<p>New discovery call completed. Action: review notes, decide whether to offer the £350 roadmap within 24 hours.</p><p><strong>Client:</strong> ${clientName}<br/><strong>Business:</strong> ${businessName}<br/><strong>Email:</strong> ${clientEmail}</p>${offerHint}<p>Full notes attached.</p></div>`,
       attachments: [{ filename, content: docBuffer.toString('base64') }]
     })
   });
   if (!r.ok) {
     const errText = await r.text();
     console.error('Internal email error', r.status, errText);
-    throw new Error('Internal email failed: ' + r.status);
+    throw new Error('Internal email failed: ' + r.status + ' ' + errText.slice(0, 200));
   }
   return await r.json();
 }
@@ -639,8 +699,9 @@ app.post('/api/save-transcript', async (req, res) => {
       console.error('Client ack failed', err);
       summaryError = err.message;
     }
+    let notes = null;
     try {
-      const notes = await generateInternalNotes(transcript, clientName, businessName);
+      notes = await generateInternalNotes(transcript, clientName, businessName);
       const docBuffer = await buildInternalNotesDocx(notes, {
         clientName, businessName, email,
         dateStr: new Date(startTime || Date.now()).toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' }),
@@ -648,9 +709,24 @@ app.post('/api/save-transcript', async (req, res) => {
       });
       const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.shouldOfferRoadmap);
       internalEmailed = !internalResult.skipped;
+      if (internalResult.skipped) summaryError = (summaryError ? summaryError + ' | ' : '') + 'Internal email skipped: RESEND_API_KEY or BCC_EMAIL not set on the server';
     } catch (err) {
       console.error('Internal notes/email error', err);
       summaryError = (summaryError ? summaryError + ' | ' : '') + err.message;
+      // Fallback: if the Word doc could not be made or sent, still email the raw transcript so the call is never lost
+      if (!internalEmailed) {
+        try {
+          const raw = Buffer.from('Client: ' + clientName + '\nBusiness: ' + businessName + '\nEmail: ' + email + '\n\n' + transcriptText, 'utf8');
+          const fb = await sendInternalNotes(clientName, businessName, email, raw, null, {
+            ext: 'txt',
+            extraHtml: '<p style="color:#b45309"><strong>Note:</strong> the Word summary could not be generated or sent (' + String(err.message).replace(/[<>]/g, '') + '). Raw transcript attached instead.</p>'
+          });
+          internalEmailed = !fb.skipped;
+        } catch (err2) {
+          console.error('Fallback transcript email failed', err2);
+          summaryError += ' | fallback: ' + err2.message;
+        }
+      }
     }
   }
 
