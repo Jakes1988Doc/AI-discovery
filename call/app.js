@@ -107,7 +107,9 @@ function ensureDebugPanel() {
   document.body.appendChild(wrap);
 }
 function dbg(msg) {
-  const t0 = (typeof state !== 'undefined' && state.startTime) ? state.startTime : Date.now();
+  // `typeof state` would throw here if dbg() runs before `let state` is initialised, so guard with try/catch
+  let t0 = Date.now();
+  try { if (state && state.startTime) t0 = state.startTime; } catch (e) {}
   const line = ((Date.now() - t0) / 1000).toFixed(1) + 's  ' + msg;
   try { console.log('[call] ' + line); } catch (e) {}
   if (!DEBUG) return;
@@ -644,6 +646,7 @@ async function saveTranscriptToBackend() {
 // (mic ended silently, an error swallowed a callback…), start listening again.
 function checkStall() {
   if (!state.started || state.callOver) return;
+  if (state.micBlocked) return; // user must type; retrying would just fail again
   if (state.isSpeaking || state.processingAnswer || state.isListening || state.wantListening) return;
   dbg('stall detected — restarting mic');
   startListening();
@@ -651,6 +654,11 @@ function checkStall() {
 
 function startListening() {
   if (state.callOver) return;
+  if (state.micBlocked) {
+    setStatus('Mic blocked — type your answer below.', null);
+    textInput.disabled = false; sendTextBtn.disabled = false; textInput.focus();
+    return;
+  }
   if (!state.recognition) {
     setStatus('Mic not available — type your answer below.', null);
     textInput.disabled = false; sendTextBtn.disabled = false; textInput.focus();
@@ -754,11 +762,14 @@ function setupRecognition() {
   };
   rec.onerror = function(ev) {
     dbg('mic error: ' + ev.error);
-    if (ev.error === 'not-allowed') {
+    if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       showWarn('Microphone permission denied. Allow mic access or use the text input.');
-      setStatus('Mic blocked — use text input.', null);
+      setStatus('Mic blocked — type your answer below.', null);
+      // Remember this so the stall watchdog doesn't keep retrying a mic that is blocked
+      state.micBlocked = true;
       state.wantListening = false;
       state.isListening = false;
+      textInput.disabled = false; sendTextBtn.disabled = false; textInput.focus();
     } else if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
       setStatus('Mic issue: ' + ev.error + '. Use text input.', null);
     }
