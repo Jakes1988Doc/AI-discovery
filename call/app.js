@@ -4,6 +4,11 @@
 const BACKEND_URL = "https://ai-discovery-tx39.onrender.com";
 // =============================================================
 
+// Wake the (free-tier) backend as soon as the page loads so the first question isn't slow
+try { fetch(BACKEND_URL.replace(/\/$/, '') + '/').catch(function() {}); } catch (e) {}
+
+const CLOSING_TEXT = "That's everything I wanted to cover — thank you, this has been really useful. We'll review what you've shared, and if we see a clear fit for AI in your business we'll be in touch about the roadmap. No obligation either way.";
+
 const TOPICS = [
   {
     id: 'business_snapshot',
@@ -206,15 +211,24 @@ let currentAudioResolve = null;
 
 function stopAllSpeech() {
   speakToken++;
-  if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+  if (currentAudio) {
+    try {
+      currentAudio.onended = null; currentAudio.onerror = null; currentAudio.onplaying = null;
+      currentAudio.pause();
+      currentAudio.removeAttribute('src');
+      currentAudio.load(); // aborts the in-flight stream
+    } catch (e) {}
+    currentAudio = null;
+  }
   if (currentAudioResolve) { const r = currentAudioResolve; currentAudioResolve = null; r(); }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 
-async function speak(text, onDone) {
+async function speak(text, onDone, opts) {
   stopAllSpeech();
   const myToken = speakToken;
   const stale = function() { return myToken !== speakToken; };
+  const isFinal = !!(opts && opts.final);
 
   state.isSpeaking = true;
   setStatus('Agent speaking…', 'speaking');
@@ -222,72 +236,48 @@ async function speak(text, onDone) {
   const finish = function() {
     if (stale()) return;
     state.isSpeaking = false;
-    setStatus('Listening…', 'listening');
+    if (!isFinal) setStatus('Listening…', 'listening');
     if (onDone) onDone();
   };
 
-  try {
-    const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/speak', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
+  // Stream the audio: the browser starts playing as soon as the first chunks
+  // arrive instead of waiting for the whole mp3 to download.
+  const url = BACKEND_URL.replace(/\/$/, '') + '/api/speak?text=' + encodeURIComponent(text);
+  const audio = new Audio();
+  audio.preload = 'auto';
+  currentAudio = audio;
+  let started = false;
+  let needFallback = false;
+
+  await new Promise(function(resolve) {
+    currentAudioResolve = resolve;
+    const done = function() {
+      if (currentAudio === audio) currentAudio = null;
+      if (currentAudioResolve === resolve) currentAudioResolve = null;
+      resolve();
+    };
+    audio.onplaying = function() { started = true; };
+    audio.onended = done;
+    audio.onerror = function() {
+      // Only fall back to browser TTS if nothing was heard yet (avoids repeating the question)
+      needFallback = !started;
+      done();
+    };
+    audio.src = url;
+    audio.play().catch(function(playErr) {
+      if (stale()) return done();
+      console.warn('Audio play failed:', playErr);
+      needFallback = !started;
+      done();
     });
-    if (stale()) return;
+  });
 
-    const contentType = response.headers.get('Content-Type') || '';
-
-    // Backend error or fallback signal
-    if (!response.ok || contentType.includes('application/json')) {
-      console.warn('ElevenLabs unavailable, using browser TTS');
-      await speakFallback(text);
-      finish();
-      return;
-    }
-
-    // ElevenLabs returned audio — play it
-    const arrayBuffer = await response.arrayBuffer();
-    if (stale()) return;
-    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-      console.warn('Empty audio response, using browser TTS');
-      await speakFallback(text);
-      finish();
-      return;
-    }
-
-    const audioBlob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
-    const audioUrl = URL.createObjectURL(audioBlob);
-    const audio = new Audio(audioUrl);
-    currentAudio = audio;
-
-    await new Promise(function(resolve) {
-      currentAudioResolve = resolve;
-      const cleanup = function() {
-        if (currentAudio === audio) currentAudio = null;
-        if (currentAudioResolve === resolve) currentAudioResolve = null;
-        URL.revokeObjectURL(audioUrl);
-      };
-      audio.onended = function() { cleanup(); resolve(); };
-      audio.onerror = function(e) {
-        console.warn('Audio error:', e);
-        cleanup();
-        resolve(); // resolve anyway so finish() fires
-      };
-      audio.play().catch(async function(playErr) {
-        console.warn('Autoplay blocked:', playErr);
-        cleanup();
-        if (!stale()) await speakFallback(text);
-        resolve();
-      });
-    });
-
-    finish();
-
-  } catch (err) {
-    if (stale()) return;
-    console.warn('speak() error, using browser TTS:', err);
+  if (stale()) return;
+  if (needFallback) {
+    console.warn('ElevenLabs unavailable, using browser TTS');
     await speakFallback(text);
-    finish();
   }
+  finish();
 }
 
 function pushAgent(text) {
@@ -316,9 +306,12 @@ async function generateNextQuestion() {
     return { role: t.role === 'agent' ? 'assistant' : 'user', content: t.text };
   });
 
+  const ctrl = new AbortController();
+  const timeoutId = setTimeout(function() { ctrl.abort(); }, 15000);
   try {
     const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/next-question', {
       method: 'POST',
+      signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: messagesForApi,
@@ -339,6 +332,7 @@ async function generateNextQuestion() {
         deepProbeUsedOnTopic: state.deepProbeUsedOnTopic
       })
     });
+    clearTimeout(timeoutId);
     if (!response.ok) throw new Error('Backend ' + response.status);
     const decision = await response.json();
 
@@ -354,6 +348,7 @@ async function generateNextQuestion() {
 
     return decision;
   } catch (err) {
+    clearTimeout(timeoutId);
     console.error('Backend error', err);
     showWarn('Could not reach the backend. Falling back to next topic.');
     const nextIdx = state.currentTopicIdx + 1;
@@ -364,8 +359,26 @@ async function generateNextQuestion() {
   }
 }
 
+// The server (v2) returns a short acknowledgement in next_question when it moves on;
+// we speak it just before the next topic's opener. Old servers return a full question
+// here, so only trust it when v === 2 and it contains no question.
+function bridgeFrom(decision) {
+  if (decision && decision.v === 2 && typeof decision.next_question === 'string') {
+    const b = decision.next_question.trim();
+    if (b && b.indexOf('?') === -1 && b.length < 220) return b;
+  }
+  return '';
+}
+
 async function handleAnswerAndContinue() {
   const currentTopic = TOPICS[state.currentTopicIdx];
+
+  // Last topic (magic wand): no probing and no need to wait for the AI —
+  // close the call straight away so it always finishes cleanly.
+  if (state.currentTopicIdx >= TOPICS.length - 1) {
+    finishCall(CLOSING_TEXT);
+    return;
+  }
 
   // Hard guard: no-probe topics move on immediately after opener
   if (!currentTopic.allowProbe && state.exchangesOnTopic >= 1) {
@@ -393,15 +406,9 @@ async function handleAnswerAndContinue() {
   const decision = await generateNextQuestion();
   clearWarn();
 
-  if (decision.action === 'next_topic') {
-    moveToNextTopic();
-    return;
-  }
-
-  if (decision.action === 'wrap_up') {
-    pushAgent(decision.next_question);
-    speak(decision.next_question, function() { startListening(); });
-    state.callOver = true;
+  // wrap_up before the final topic is treated as next_topic so the call can't end early
+  if (decision.action === 'next_topic' || decision.action === 'wrap_up') {
+    moveToNextTopic(bridgeFrom(decision));
     return;
   }
 
@@ -416,12 +423,26 @@ async function handleAnswerAndContinue() {
   speak(decision.next_question, function() { startListening(); });
 }
 
-function moveToNextTopic() {
+// Close the call: speak the goodbye, save the transcript, tidy up. Always reached
+// after the last topic so the conversation can't just hang.
+async function finishCall(closing) {
+  if (state.callOver) return;
+  state.callOver = true;
+  stopListening();
+  if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+  pushAgent(closing);
+  let saved = false;
+  const savePromise = saveTranscriptToBackend().then(function() { saved = true; });
+  await new Promise(function(resolve) { speak(closing, resolve, { final: true }); });
+  if (!saved) setStatus('Saving your transcript…', 'thinking');
+  await savePromise;
+  stopBtn.disabled = true;
+}
+
+function moveToNextTopic(bridge) {
   const nextIdx = state.currentTopicIdx + 1;
   if (nextIdx >= TOPICS.length) {
-    // All topics done — save and close cleanly
-    state.callOver = true;
-    saveTranscriptToBackend();
+    finishCall(CLOSING_TEXT);
     return;
   }
   state.currentTopicIdx = nextIdx;
@@ -430,8 +451,9 @@ function moveToNextTopic() {
   state.signalStrengthOnCurrentTopic = 'none';
   state.deepProbeUsedOnTopic = false;
   const nextTopic = TOPICS[state.currentTopicIdx];
-  pushAgent(nextTopic.opener);
-  speak(nextTopic.opener, function() { startListening(); });
+  const spoken = (bridge ? bridge + ' ' : '') + nextTopic.opener;
+  pushAgent(spoken);
+  speak(spoken, function() { startListening(); });
 }
 
 async function saveTranscriptToBackend() {
@@ -457,26 +479,35 @@ async function saveTranscriptToBackend() {
   } catch (err) {
     console.error('Save error', err);
     showWarn('Could not save automatically. Use Download to keep a local copy of your transcript.');
+    setStatus('Call finished — save failed.', null);
   }
 }
 
 function startListening() {
+  if (state.callOver) return;
   if (!state.recognition) {
     setStatus('Mic not available — type your answer below.', null);
     textInput.disabled = false; sendTextBtn.disabled = false; textInput.focus();
     return;
   }
   state.finalTranscript = '';
+  state.wantListening = true;
+  state.isListening = true;
+  textInput.disabled = false; sendTextBtn.disabled = false;
   try {
     state.recognition.start();
-    state.isListening = true;
     setStatus("Listening… (pause when you're done)", 'live');
-    textInput.disabled = false; sendTextBtn.disabled = false;
   } catch (e) {
-    setStatus('Mic busy — try the text input.', null);
+    if (e && e.name === 'InvalidStateError') {
+      // Still shutting down from the last turn — onend will restart it (wantListening is set)
+      setStatus("Listening… (pause when you're done)", 'live');
+    } else {
+      setStatus('Mic busy — try the text input.', null);
+    }
   }
 }
 function stopListening() {
+  state.wantListening = false;
   if (state.recognition && state.isListening) {
     try { state.recognition.stop(); } catch (e) {}
     state.isListening = false;
@@ -544,12 +575,26 @@ function setupRecognition() {
     if (ev.error === 'not-allowed') {
       showWarn('Microphone permission denied. Allow mic access or use the text input.');
       setStatus('Mic blocked — use text input.', null);
-    } else if (ev.error !== 'no-speech') {
+      state.wantListening = false;
+      state.isListening = false;
+    } else if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
       setStatus('Mic issue: ' + ev.error + '. Use text input.', null);
     }
-    state.isListening = false;
+    // no-speech / aborted: Chrome ends the session on its own — onend restarts it
   };
-  rec.onend = function() { state.isListening = false; };
+  // Chrome ends recognition after a stretch of silence. If we still want to listen,
+  // restart it, otherwise the call would sit on "Listening…" forever.
+  rec.onend = function() {
+    if (state.wantListening && !state.callOver) {
+      setTimeout(function() {
+        if (state.wantListening && !state.callOver) {
+          try { rec.start(); } catch (e) {}
+        }
+      }, 300);
+    } else {
+      state.isListening = false;
+    }
+  };
   state.recognition = rec;
 }
 
@@ -609,13 +654,15 @@ function startCall() {
 }
 
 async function endCallEarly() {
+  state.callOver = true;
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
   stopAllSpeech();
   const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll be in touch about the £350 roadmap. No obligation either way.";
   pushAgent(closing);
-  await saveTranscriptToBackend();
-  speak(closing);
+  const savePromise = saveTranscriptToBackend();
+  speak(closing, null, { final: true });
+  await savePromise;
   setStatus('Call ended.', null);
   stopBtn.disabled = true;
 }
@@ -655,7 +702,7 @@ function resetAll() {
     isListening: false, isSpeaking: false, finalTranscript: '', silenceTimer: null,
     clientName: '', businessName: '', email: '',
     signalDetectedOnCurrentTopic: false, signalStrengthOnCurrentTopic: 'none',
-    deepProbeAvailable: true, deepProbeUsedOnTopic: false, processingAnswer: false
+    deepProbeAvailable: true, deepProbeUsedOnTopic: false, processingAnswer: false, wantListening: false
   };
   currentQEl.textContent = "When you press start, the agent will ask its first question and listen for your reply.";
   topicPill.textContent = 'Intro';
