@@ -45,6 +45,7 @@ const SVC_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'AI Growth Catalyst <onboarding@resend.dev>';
 const BCC_EMAIL = process.env.BCC_EMAIL || '';
+const REPLY_TO_EMAIL = process.env.REPLY_TO_EMAIL || '';
 
 const INTERVIEWER_PROMPT = `You are a skilled business discovery interviewer conducting a 15-minute voice conversation with a small or medium business owner. You are doing a high-level scan to identify where AI could genuinely add value — NOT a deep operational audit. Depth comes later in the paid roadmap.
 
@@ -462,7 +463,7 @@ function buildSnapshotEmail(rawNotes, clientName, businessName) {
   const dateStr = new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' });
   const oppCount = (n.opportunities || []).length;
   const subject = 'Your AI Opportunity Snapshot — ' + (businessName || 'your business');
-  const tile = (label, value) => '<td style="width:50%;padding:6px"><div style="background:#fff;border:1px solid #e8dec5;border-radius:10px;padding:12px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9a8a6a">' + escHtml(label) + '</div><div style="font-size:16px;color:#1a2332;font-weight:600;margin-top:2px">' + escHtml(value || '—') + '</div></div></td>';
+  const metricCell = (label, value, divider) => '<td width="33%" align="left" valign="top" style="width:33.33%;padding:12px 14px;text-align:left;vertical-align:top' + (divider ? ';border-right:1px solid #e8dec5' : '') + '"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9a8a6a;line-height:1.4">' + escHtml(label) + '</div><div style="font-size:15px;color:#1a2332;font-weight:600;margin-top:3px;line-height:1.45">' + escHtml(value || '—') + '</div></td>';
   const sectionHead = (num, title) => '<p style="margin:28px 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#c85a3e"><strong>' + num + ' · ' + escHtml(title) + '</strong></p>';
   const pain = sn.painPoints.slice(0, 3).map(function(p, i) {
     return '<div style="margin:0 0 14px"><div style="font-size:15px;color:#1a2332"><strong>' + (i + 1) + '. ' + escHtml(p.title) + '</strong></div>' +
@@ -485,7 +486,12 @@ function buildSnapshotEmail(rawNotes, clientName, businessName) {
         <p style="margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#b8843a"><strong>Quick win #1</strong></p>
         <p style="margin:0 0 8px;font-size:18px;color:#1a2332"><strong>${escHtml(sp.name)}</strong></p>
         <p style="margin:0 0 12px;font-size:14px;color:#374151">${escHtml(sp.whatChanges)}</p>
-        <table role="presentation" style="width:100%;border-collapse:collapse"><tr>${tile('Time to live', sp.timeToLive)}${tile('Estimated saving', sp.estimatedSaving)}</tr><tr>${tile('Team effort', sp.teamEffort)}${tile('Workflow disruption', sp.workflowDisruption)}</tr></table>
+        <div style="border:1px solid #e8dec5;border-radius:10px;overflow:hidden;background:#ffffff">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;table-layout:fixed;border-collapse:collapse">
+            <tr>${metricCell('Time to live', sp.timeToLive, true)}${metricCell('Team effort', sp.teamEffort, true)}${metricCell('Workflow disruption', sp.workflowDisruption, false)}</tr>
+            <tr><td colspan="3" align="left" valign="top" style="padding:12px 14px;border-top:1px solid #e8dec5;text-align:left;vertical-align:top"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9a8a6a;line-height:1.4">Estimated saving</div><div style="font-size:15px;color:#1a2332;font-weight:600;margin-top:3px;line-height:1.45">${escHtml(sp.estimatedSaving || '—')}</div></td></tr>
+          </table>
+        </div>
         ${sp.whyThisFirst ? '<p style="margin:10px 0 0;font-size:14px;color:#374151"><strong>Why this first:</strong> ' + escHtml(sp.whyThisFirst) + '</p>' : ''}
       </div>
       <div style="margin-top:24px;padding:16px;border:1px dashed #c9bfa5;border-radius:12px;background:#faf7f0">
@@ -514,7 +520,8 @@ async function sendClientSnapshot(toEmail, rawNotes, clientName, businessName) {
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
-    body: JSON.stringify({ from: FROM_EMAIL, to: [toEmail], subject, html })
+    body: JSON.stringify(Object.assign({ from: FROM_EMAIL, to: [toEmail], subject, html },
+      BCC_EMAIL ? { bcc: [BCC_EMAIL] } : {}, REPLY_TO_EMAIL ? { reply_to: REPLY_TO_EMAIL } : {}))
   });
   if (!r.ok) {
     const errText = await r.text();
@@ -685,7 +692,7 @@ async function sendClientAcknowledgement(toEmail, clientName, businessName) {
       </p>
       <div style="background: #fbf6ec; border: 1px solid #e8dec5; border-radius: 12px; padding: 24px; margin: 24px 0;">
         <p style="font-size: 16px; margin: 0 0 12px; color: #1a2332;"><strong>What happens now</strong></p>
-        <p style="font-size: 14px; margin: 0 0 12px; color: #5d6b80; line-height: 1.6;">If we identify a clear opportunity for AI in your business, we'll be in touch within 24 hours about the bespoke roadmap (£350, fixed fee, delivered within 48 hours).</p>
+        <p style="font-size: 14px; margin: 0 0 12px; color: #5d6b80; line-height: 1.6;">Within 24 hours you'll receive a short written snapshot of your single strongest AI opportunity. If the call shows a clear opportunity, we'll also tell you about the bespoke roadmap (£350, fixed fee, delivered within 48 hours of payment).</p>
         <p style="font-size: 14px; margin: 0; color: #5d6b80; line-height: 1.6;">If we don't see a clear fit, we'll tell you that honestly. Either way, no follow-up sales pressure.</p>
       </div>
       <p style="font-size: 15px; margin-bottom: 16px;">
@@ -708,7 +715,7 @@ async function sendClientAcknowledgement(toEmail, clientName, businessName) {
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
-    body: JSON.stringify({ from: FROM_EMAIL, to: [toEmail], subject, html: htmlBody })
+    body: JSON.stringify(Object.assign({ from: FROM_EMAIL, to: [toEmail], subject, html: htmlBody }, REPLY_TO_EMAIL ? { reply_to: REPLY_TO_EMAIL } : {}))
   });
   if (!r.ok) {
     const errText = await r.text();
@@ -1165,6 +1172,116 @@ app.post('/r/:token/save', async function(req, res) {
 //  (e.g. when the notes said NO but you disagree). Needs ADMIN_KEY set on Render.
 // ============================================================
 const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://ai-discovery-tx39.onrender.com').replace(/\/$/, '');
+// ============================================================
+//  Snapshot: stored as a draft, emailed to you, sent to the client only when you click the link
+// ============================================================
+async function ensureSnapshotTab(sheets) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const has = (meta.data.sheets || []).some(sh => sh.properties && sh.properties.title === 'Snapshots');
+  if (!has) {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: 'Snapshots' } } }] } });
+    await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: 'Snapshots!A1:H1', valueInputOption: 'RAW',
+      requestBody: { values: [['Token', 'Created', 'Business', 'Client', 'Email', 'Subject', 'Snapshot JSON', 'Status']] } });
+  }
+}
+function snapSig(token) { return crypto.createHmac('sha256', process.env.ADMIN_KEY || '').update('snap:' + token).digest('hex'); }
+function validSnapSig(token, sig) {
+  if (!process.env.ADMIN_KEY || !sig) return false;
+  const a = Buffer.from(snapSig(token)), b = Buffer.from(String(sig));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+async function findSnapRow(sheets, token) {
+  const col = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Snapshots!A:A' });
+  const rows = col.data.values || [];
+  for (let i = 1; i < rows.length; i++) if (rows[i][0] === token) return i + 1;
+  return null;
+}
+async function storeSnapshot(rawNotes, meta) {
+  if (!(SHEET_ID && SVC_JSON)) throw new Error('Google Sheet not configured');
+  if (!process.env.ADMIN_KEY) throw new Error('ADMIN_KEY is not set on the server');
+  const n = normaliseNotes(rawNotes);
+  const record = {
+    notes: { recapFit: n.recapFit, snapshot: n.snapshot, opportunities: (n.opportunities || []).map(o => ({ name: o.name })) },
+    meta: { clientName: meta.clientName, businessName: meta.businessName, email: meta.email }
+  };
+  const json = JSON.stringify(record);
+  if (json.length > 48000) throw new Error('Snapshot too large for one sheet cell');
+  const token = crypto.randomBytes(18).toString('base64url');
+  const subject = buildSnapshotEmail(record.notes, meta.clientName, meta.businessName).subject;
+  const sheets = sheetsClient();
+  await ensureSnapshotTab(sheets);
+  await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'Snapshots!A1', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [[token, new Date().toISOString(), meta.businessName, meta.clientName, meta.email, subject, json, 'draft']] } });
+  return token;
+}
+async function loadSnapshot(token) {
+  if (!/^[A-Za-z0-9_-]{20,40}$/.test(token) || !(SHEET_ID && SVC_JSON)) return null;
+  const sheets = sheetsClient();
+  const row = await findSnapRow(sheets, token);
+  if (!row) return null;
+  const got = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Snapshots!G' + row + ':H' + row });
+  const cells = (got.data.values || [])[0] || [];
+  if (!cells[0]) return null;
+  return { row, record: JSON.parse(cells[0]), status: cells[1] || 'draft' };
+}
+function snapshotLinkHtml(token) {
+  const url = PUBLIC_URL + '/admin/snapshot?t=' + encodeURIComponent(token) + '&sig=' + snapSig(token);
+  return '<p style="margin:16px 0"><a href="' + url + '" style="display:inline-block;background:#c85a3e;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:8px">Review and send to client</a></p>' +
+    '<p style="font-size:12px;color:#6b7280;margin:0 0 12px">Opens a confirm page showing who it goes to. Nothing is sent until you press Send there.</p>';
+}
+const snapSending = new Set();
+function snapPage(title, bodyHtml) {
+  return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>' + escHtml(title) + '</title>' +
+    '<body style="font-family:-apple-system,Segoe UI,sans-serif;max-width:680px;margin:6vh auto;padding:0 20px 60px;color:#1a2332;line-height:1.6">' + bodyHtml + '</body>';
+}
+app.get('/admin/snapshot', async function(req, res) {
+  const token = String(req.query.t || '');
+  if (!validSnapSig(token, req.query.sig)) return res.status(403).send(snapPage('Not allowed', '<h2>Link not valid</h2><p>This link is invalid, or ADMIN_KEY is not set on the server.</p>'));
+  let snap;
+  try { snap = await loadSnapshot(token); } catch (err) {
+    return res.status(500).send(snapPage('Error', '<h2>Could not read the snapshot</h2><p>' + escHtml(err.message) + '</p>'));
+  }
+  if (!snap) return res.status(404).send(snapPage('Not found', '<h2>Snapshot not found</h2>'));
+  const m = snap.record.meta || {};
+  const built = buildSnapshotEmail(snap.record.notes, m.clientName, m.businessName);
+  const sent = /^sent/i.test(snap.status);
+  const head = '<h2 style="margin:0 0 4px">Send snapshot to ' + escHtml(m.businessName || 'client') + '?</h2>';
+  const form = sent
+    ? '<p style="padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px"><strong>Already sent.</strong> ' + escHtml(snap.status) + '</p>'
+    : '<form method="POST" action="/admin/snapshot" style="margin:14px 0;padding:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb">' +
+      '<input type="hidden" name="t" value="' + escHtml(token) + '"><input type="hidden" name="sig" value="' + escHtml(req.query.sig) + '">' +
+      '<label style="display:block;font-size:13px;color:#6b7280;margin-bottom:4px">Send to (fix it here if the customer mistyped their address)</label>' +
+      '<input name="to" type="email" required value="' + escHtml(m.email || '') + '" style="font:inherit;width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:10px">' +
+      '<p style="font-size:13px;color:#6b7280;margin:0 0 10px">Subject: <em>' + escHtml(built.subject) + '</em>. You are copied on BCC.</p>' +
+      '<button style="font:inherit;padding:11px 20px;border:0;border-radius:8px;background:#c85a3e;color:#fff;cursor:pointer;font-weight:600">Send snapshot now</button></form>';
+  res.send(snapPage('Send snapshot', head + form + '<p style="font-size:13px;color:#6b7280;margin:18px 0 6px">Preview of exactly what they will receive:</p><div style="border:1px solid #e5e7eb;border-radius:10px;padding:16px">' + built.html + '</div>'));
+});
+app.post('/admin/snapshot', async function(req, res) {
+  const token = String((req.body || {}).t || '');
+  if (!validSnapSig(token, (req.body || {}).sig)) return res.status(403).send(snapPage('Not allowed', '<h2>Link not valid</h2>'));
+  const to = String((req.body || {}).to || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || to.length > 200) return res.status(400).send(snapPage('Check address', '<h2>That email address does not look right</h2><p>Go back and fix it.</p>'));
+  if (snapSending.has(token)) return res.status(409).send(snapPage('Sending', '<h2>Already sending</h2><p>This snapshot is being sent. Check your inbox.</p>'));
+  snapSending.add(token);
+  try {
+    const snap = await loadSnapshot(token);
+    if (!snap) return res.status(404).send(snapPage('Not found', '<h2>Snapshot not found</h2>'));
+    if (/^sent/i.test(snap.status)) return res.send(snapPage('Already sent', '<h2>Already sent</h2><p>' + escHtml(snap.status) + '</p>'));
+    const m = snap.record.meta || {};
+    await sendClientSnapshot(to, snap.record.notes, m.clientName, m.businessName);
+    try {
+      await sheetsClient().spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: 'Snapshots!H' + snap.row, valueInputOption: 'RAW',
+        requestBody: { values: [['sent ' + new Date().toISOString() + ' to ' + to]] } });
+    } catch (e) { console.error('Snapshot status update failed', e.message); }
+    res.send(snapPage('Sent', '<h2>Sent</h2><p>The snapshot for <strong>' + escHtml(m.businessName || '') + '</strong> was emailed to <strong>' + escHtml(to) + '</strong>. You are copied on BCC. This link will now show "Already sent".</p>'));
+  } catch (err) {
+    console.error('Snapshot send failed', err);
+    res.status(500).send(snapPage('Failed', '<h2>Could not send</h2><p>' + escHtml(err.message) + '</p><p>Nothing was marked as sent. You can try again from the same link.</p>'));
+  } finally {
+    snapSending.delete(token);
+  }
+});
+
 function signRow(row) {
   return crypto.createHmac('sha256', process.env.ADMIN_KEY || '').update('roadmap:' + row).digest('hex');
 }
@@ -1299,13 +1416,9 @@ app.post('/api/save-transcript', async (req, res) => {
       };
     }
 
-    // Client email: with AUTO_SEND_SNAPSHOT=true and a usable strong/moderate-fit snapshot, send the Tier 1 snapshot;
-    // otherwise (default) send the generic acknowledgement and leave the snapshot as a draft for you.
-    const autoSnapshot = process.env.AUTO_SEND_SNAPSHOT === 'true' && notes && snapshotUsable(notes);
+    // Client always gets the acknowledgement now. The snapshot is stored as a draft and only sent when you click the link in the internal email.
     try {
-      const sent = autoSnapshot
-        ? await sendClientSnapshot(email, notes, clientName, businessName)
-        : await sendClientAcknowledgement(email, clientName, businessName);
+      const sent = await sendClientAcknowledgement(email, clientName, businessName);
       clientEmailed = !sent.skipped;
     } catch (err) {
       console.error('Client email failed', err);
@@ -1322,8 +1435,16 @@ app.post('/api/save-transcript', async (req, res) => {
       let afterHtml = '';
       if (snapshotUsable(notes)) {
         const d = buildSnapshotEmail(notes, clientName, businessName);
-        afterHtml = '<hr/><p><strong>' + (autoSnapshot ? 'Sent to the client automatically' : 'Draft client snapshot — not sent. Review, then forward or paste') + ':</strong></p>' +
-          '<p><em>Subject: ' + escHtml(d.subject) + '</em></p><div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">' + d.html + '</div>'
+        let linkBlock;
+        try {
+          const snapToken = await storeSnapshot(notes, { clientName, businessName, email });
+          linkBlock = snapshotLinkHtml(snapToken);
+        } catch (err) {
+          console.error('Snapshot store failed', err.message);
+          linkBlock = '<p style="color:#b45309"><strong>The send button is unavailable (' + escHtml(err.message) + ').</strong> Copy the snapshot below into an email to ' + escHtml(email) + ' yourself.</p>';
+        }
+        afterHtml = '<hr/><p><strong>Draft client snapshot. Not sent yet.</strong> Read it and the checks below, then press the button.</p>' + linkBlock +
+          '<p><em>Subject: ' + escHtml(d.subject) + '</em></p><div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">' + d.html + '</div>';
         const sc = normaliseNotes(notes).snapshotChecks || [];
         if (sc.length) afterHtml += '<p><strong>Check before sending:</strong></p><ul>' + sc.map(c => '<li>' + escHtml(c) + '</li>').join('') + '</ul>';
       } else {
