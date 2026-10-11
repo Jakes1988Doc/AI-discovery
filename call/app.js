@@ -219,9 +219,11 @@ function speakFallback(text) {
 // otherwise start the mic early or trigger a second voice).
 let speakToken = 0;
 let currentAudioResolve = null;
+let speakAbort = null;
 
 function stopAllSpeech() {
   speakToken++;
+  if (speakAbort) { try { speakAbort.abort(); } catch (e) {} speakAbort = null; }
   if (currentAudio) {
     try {
       currentAudio.onended = null; currentAudio.onerror = null; currentAudio.onplaying = null;
@@ -233,6 +235,63 @@ function stopAllSpeech() {
   }
   if (currentAudioResolve) { const r = currentAudioResolve; currentAudioResolve = null; r(); }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+// Plays an mp3 ArrayBuffer on the persistent player. Resolves true if the audio was
+// heard, false if it never started (so the caller can use the browser voice instead).
+// It always resolves: ended, error, a start-up watchdog, and a duration-based safety
+// timer all guarantee the call can never hang waiting for playback to finish.
+function playBuffer(arrayBuffer, stale) {
+  return new Promise(function(resolve) {
+    const audio = player;
+    const url = URL.createObjectURL(new Blob([arrayBuffer], { type: 'audio/mpeg' }));
+    currentAudio = audio;
+    currentAudioResolve = function() { finish(started); };
+    let started = false;
+    let settled = false;
+    let startWatchdog = null;
+    let endSafety = null;
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(startWatchdog);
+      clearTimeout(endSafety);
+      audio.onplaying = null; audio.onended = null; audio.onerror = null; audio.onloadedmetadata = null;
+      if (currentAudio === audio) currentAudio = null;
+      currentAudioResolve = null;
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      resolve(result);
+    }
+
+    startWatchdog = setTimeout(function() {
+      if (started) return;
+      console.warn('Audio did not start within 5s');
+      try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (e) {}
+      finish(false);
+    }, 5000);
+
+    audio.onplaying = function() {
+      started = true;
+      clearTimeout(startWatchdog);
+      if (!stale()) setStatus('Agent speaking…', 'speaking');
+    };
+    audio.onloadedmetadata = function() {
+      const d = audio.duration;
+      if (isFinite(d) && d > 0) {
+        endSafety = setTimeout(function() { finish(true); }, d * 1000 + 3000);
+      }
+    };
+    audio.onended = function() { finish(true); };
+    audio.onerror = function() { finish(started); };
+
+    audio.src = url;
+    audio.play().catch(function(err) {
+      if (stale()) return finish(started);
+      console.warn('Audio play failed:', err);
+      finish(started);
+    });
+  });
 }
 
 async function speak(text, onDone, opts) {
@@ -251,56 +310,36 @@ async function speak(text, onDone, opts) {
     if (onDone) onDone();
   };
 
-  // Stream the audio: the browser starts playing as soon as the first chunks
-  // arrive instead of waiting for the whole mp3 to download.
-  const url = BACKEND_URL.replace(/\/$/, '') + '/api/speak?text=' + encodeURIComponent(text);
-  const audio = player;
-  currentAudio = audio;
-  let started = false;
-  let needFallback = false;
-
-  await new Promise(function(resolve) {
-    currentAudioResolve = resolve;
-    // If nothing starts playing within 8s (backend asleep / stalled), stop waiting and
-    // use the browser voice so the call never sits there in silence.
-    const watchdog = setTimeout(function() {
-      if (started || stale()) return;
-      console.warn('No audio after 8s — using browser TTS');
-      needFallback = true;
-      try {
-        audio.onended = null; audio.onerror = null; audio.onplaying = null;
-        audio.pause(); audio.removeAttribute('src'); audio.load();
-      } catch (e) {}
-      done();
-    }, 8000);
-    const done = function() {
-      clearTimeout(watchdog);
-      if (currentAudio === audio) currentAudio = null;
-      if (currentAudioResolve === resolve) currentAudioResolve = null;
-      resolve();
-    };
-    audio.onplaying = function() {
-      started = true;
-      clearTimeout(watchdog);
-      if (!stale()) setStatus('Agent speaking…', 'speaking');
-    };
-    audio.onended = done;
-    audio.onerror = function() {
-      // Only fall back to browser TTS if nothing was heard yet (avoids repeating the question)
-      needFallback = !started;
-      done();
-    };
-    audio.src = url;
-    audio.play().catch(function(playErr) {
-      if (stale()) return done();
-      console.warn('Audio play failed:', playErr);
-      needFallback = !started;
-      done();
+  // 1. Fetch the ElevenLabs audio (10s limit so a sleeping backend can't leave us silent)
+  let buf = null;
+  const ctrl = new AbortController();
+  speakAbort = ctrl;
+  const fetchTimer = setTimeout(function() { ctrl.abort(); }, 10000);
+  try {
+    const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/speak', {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
     });
-  });
-
+    const contentType = response.headers.get('Content-Type') || '';
+    if (response.ok && !contentType.includes('application/json')) {
+      buf = await response.arrayBuffer();
+    }
+  } catch (err) {
+    if (!stale()) console.warn('speak() fetch failed:', err);
+  }
+  clearTimeout(fetchTimer);
+  if (speakAbort === ctrl) speakAbort = null;
   if (stale()) return;
-  if (needFallback) {
+
+  // 2. Play it; fall back to the browser voice if it could not be heard
+  let heard = false;
+  if (buf && buf.byteLength > 0) {
+    heard = await playBuffer(buf, stale);
+    if (stale()) return;
+  }
+  if (!heard) {
     console.warn('ElevenLabs unavailable, using browser TTS');
     setStatus('Agent speaking…', 'speaking');
     await speakFallback(text);
