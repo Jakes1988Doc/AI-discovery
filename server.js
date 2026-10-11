@@ -137,7 +137,7 @@ next_question depends on action:
 - next_topic or wrap_up: ONLY a brief spoken acknowledgement of what they just said (one short sentence, e.g. "Makes sense." or a sharper reflection of the implication). Do NOT ask any question and do NOT introduce the next topic — the system appends the next topic's opening question itself.`;
 
 
-const INTERNAL_NOTES_PROMPT = `You are summarising a business discovery interview for an internal consultant who will use these notes to write a bespoke AI automation roadmap, and who will also send the client a short recap. Be specific — pull out numbers, tool names, frequencies, time-costs, exact phrasing. Record everything by calling the record_notes tool.
+const INTERNAL_NOTES_PROMPT = `You are summarising a business discovery interview for an internal consultant who will use these notes to write a bespoke AI automation roadmap, and who will also send the client a free written snapshot that previews the full roadmap. Be specific — pull out numbers, tool names, frequencies, time-costs, exact phrasing. Record everything by calling the record_notes tool.
 
 Field guide:
 - executiveSummary: 2-3 sentence overview of the business and its key operational challenges
@@ -159,9 +159,14 @@ Field guide:
 
 CLIENT RECAP FIELDS (these are used in an email that goes to the client, so be strict):
 - recapFit: strong, moderate, weak or none (your fit judgement, same as above)
-- recapBullets: exactly 3 short bullets saying what stood out, written as "You said…" / "It sounds like…", using the client's own words and facts. Never invent facts.
-- recapFocusArea: ONE sentence naming the single area we would look at first, phrased as an observation about their business (e.g. "Follow-up on new enquiries depends heavily on individual people being available"). It must NOT mention any tool, software, automation, AI, solution or price.
-- recapImpactLine: one sentence of simple arithmetic using ONLY figures the client stated (e.g. "You mentioned roughly a day a week goes on this, which is around 50 working days a year"). If no usable figure was stated, return an empty string. Never estimate or invent numbers.`;
+- snapshotChecks: INTERNAL list of anything in the snapshot the consultant should verify before it goes to the client (estimates, tool examples, assumptions)
+
+THE CLIENT SNAPSHOT (the "snapshot" object). This is the free written snapshot emailed to the client. It is a CONDENSED PREVIEW of the full roadmap, using the same sections and the same wording, so the client can see the roadmap is simply the fuller version. It must be specific to THIS call and cover the issues the client actually raised. Be strict: it goes to the client.
+- businessLine: one line, e.g. "Residential estate agency · 9 staff" (only facts the client stated)
+- executiveSummary: 2-3 sentences. What the business is, the main operational friction heard on the call, and the single highest-value starting point.
+- painPoints: the TOP 3 issues the client raised, ranked by impact. Each has: title (short, plain, include their figure if they gave one, e.g. "Follow-up depends on one person"), description (1-2 sentences using their facts), quote (a short VERBATIM client quote, or empty string if none fits).
+- startingPoint: the single best first step, the same opportunity the full roadmap would put first. Fields: name (e.g. "Automated enquiry follow-up"), whatChanges (2-3 plain sentences: what would be different; generic tool types only, nothing to buy), timeToLive (e.g. "3-5 days"), estimatedSaving (hours or money per week/month, ONLY from figures the client stated, shown as an estimate with "~"; if no usable figure, "To be confirmed"), teamEffort (e.g. "~2 hours"), workflowDisruption (None / Low / Medium), whyThisFirst (2 sentences).
+Never invent facts, tools they use, customer counts or savings. Plain English, UK spelling, no hype.`;
 
 // ============================================================
 app.get('/', (req, res) => {
@@ -304,11 +309,34 @@ const NOTES_TOOL = {
       },
       gapQuestions: { type: 'array', items: { type: 'string' } },
       recapFit: { type: 'string', enum: ['strong', 'moderate', 'weak', 'none'] },
-      recapBullets: { type: 'array', items: { type: 'string' } },
-      recapFocusArea: { type: 'string' },
-      recapImpactLine: { type: 'string' }
+      snapshotChecks: { type: 'array', items: { type: 'string' } },
+      snapshot: {
+        type: 'object',
+        properties: {
+          businessLine: { type: 'string' },
+          executiveSummary: { type: 'string' },
+          painPoints: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { title: { type: 'string' }, description: { type: 'string' }, quote: { type: 'string' } },
+              required: ['title', 'description']
+            }
+          },
+          startingPoint: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' }, whatChanges: { type: 'string' }, timeToLive: { type: 'string' },
+              estimatedSaving: { type: 'string' }, teamEffort: { type: 'string' },
+              workflowDisruption: { type: 'string' }, whyThisFirst: { type: 'string' }
+            },
+            required: ['name', 'whatChanges', 'timeToLive', 'estimatedSaving', 'teamEffort', 'workflowDisruption', 'whyThisFirst']
+          }
+        },
+        required: ['executiveSummary', 'painPoints', 'startingPoint']
+      }
     },
-    required: ['executiveSummary', 'suggestedFirstFocus', 'fitAssessment', 'shouldOfferRoadmap', 'recapFit', 'recapBullets', 'recapFocusArea']
+    required: ['executiveSummary', 'suggestedFirstFocus', 'fitAssessment', 'shouldOfferRoadmap', 'recapFit', 'snapshot']
   }
 };
 
@@ -364,11 +392,26 @@ function toText(v) {
   if (typeof v === 'object') return Object.values(v).map(toText).filter(Boolean).join(' — ');
   return String(v);
 }
+function toList(x) { return Array.isArray(x) ? x.map(toText).filter(Boolean) : (x ? [toText(x)] : []); }
+function normaliseStartingPoint(sp) {
+  sp = sp || {};
+  return { name: toText(sp.name), whatChanges: toText(sp.whatChanges), timeToLive: toText(sp.timeToLive),
+    estimatedSaving: toText(sp.estimatedSaving), teamEffort: toText(sp.teamEffort),
+    workflowDisruption: toText(sp.workflowDisruption), whyThisFirst: toText(sp.whyThisFirst) };
+}
+function normalisePainPoints(pp) {
+  return (Array.isArray(pp) ? pp : []).filter(o => o && typeof o === 'object')
+    .map(o => ({ title: toText(o.title), description: toText(o.description), quote: toText(o.quote) }));
+}
 function normaliseNotes(n) {
   const out = {};
   Object.keys(n || {}).forEach(function(k) {
     const v = n[k];
-    if (k === 'opportunities') {
+    if (k === 'snapshot') {
+      const sn = v && typeof v === 'object' ? v : {};
+      out[k] = { businessLine: toText(sn.businessLine), executiveSummary: toText(sn.executiveSummary),
+        painPoints: normalisePainPoints(sn.painPoints), startingPoint: normaliseStartingPoint(sn.startingPoint) };
+    } else if (k === 'opportunities') {
       out[k] = (Array.isArray(v) ? v : []).filter(function(o) { return o && typeof o === 'object'; }).map(function(o) {
         const lst = function(x) { return Array.isArray(x) ? x.map(toText).filter(Boolean) : (x ? [toText(x)] : []); };
         return {
@@ -385,52 +428,75 @@ function normaliseNotes(n) {
 }
 
 // ============================================================
-//  Tier 1 client recap — "what we heard" + ONE focus area (no solutions, no tools, no price)
+//  Tier 1 snapshot — condensed preview of the roadmap (same sections, same metrics)
 // ============================================================
 function escHtml(t) {
   return String(t == null ? '' : t).replace(/[&<>"']/g, function(c) {
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
   });
 }
-function recapUsable(rawNotes) {
+function snapshotUsable(rawNotes) {
   const n = normaliseNotes(rawNotes);
-  return !!(n.recapFocusArea && Array.isArray(n.recapBullets) && n.recapBullets.length >= 2 &&
+  const sn = n.snapshot;
+  return !!(sn && sn.executiveSummary && sn.painPoints.length >= 2 && sn.startingPoint.name && sn.startingPoint.whatChanges &&
             (n.recapFit === 'strong' || n.recapFit === 'moderate'));
 }
-function buildRecapEmail(rawNotes, clientName, businessName) {
+function buildSnapshotEmail(rawNotes, clientName, businessName) {
   const n = normaliseNotes(rawNotes);
+  const sn = n.snapshot, sp = sn.startingPoint;
   const first = (clientName || '').split(' ')[0] || 'there';
-  const bullets = (n.recapBullets || []).slice(0, 3);
-  const subject = 'What we heard on your call — ' + (businessName || 'your business');
+  const dateStr = new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  const oppCount = (n.opportunities || []).length;
+  const subject = 'Your AI Opportunity Snapshot — ' + (businessName || 'your business');
+  const tile = (label, value) => '<td style="width:50%;padding:6px"><div style="background:#fff;border:1px solid #e8dec5;border-radius:10px;padding:12px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9a8a6a">' + escHtml(label) + '</div><div style="font-size:16px;color:#1a2332;font-weight:600;margin-top:2px">' + escHtml(value || '—') + '</div></div></td>';
+  const sectionHead = (num, title) => '<p style="margin:28px 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#c85a3e"><strong>' + num + ' · ' + escHtml(title) + '</strong></p>';
+  const pain = sn.painPoints.slice(0, 3).map(function(p, i) {
+    return '<div style="margin:0 0 14px"><div style="font-size:15px;color:#1a2332"><strong>' + (i + 1) + '. ' + escHtml(p.title) + '</strong></div>' +
+      (p.description ? '<div style="font-size:14px;color:#5d6b80;margin-top:2px">' + escHtml(p.description) + '</div>' : '') +
+      (p.quote ? '<div style="font-size:14px;font-style:italic;color:#4b5563;border-left:3px solid #c85a3e;padding-left:10px;margin-top:6px">“' + escHtml(p.quote) + '”</div>' : '') + '</div>';
+  }).join('');
   const html = `
-    <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color: #374151; line-height: 1.6;">
-      <h2 style="color: #1a2332; margin-bottom: 16px; font-size: 22px;">Hi ${escHtml(first)},</h2>
-      <p style="font-size: 15px; margin-bottom: 12px;">Thanks again for the time on the call. Here is what stood out about <strong>${escHtml(businessName)}</strong>:</p>
-      <ul style="font-size: 15px; padding-left: 20px; margin-bottom: 16px;">
-        ${bullets.map(b => '<li style="margin-bottom: 6px;">' + escHtml(b) + '</li>').join('')}
-      </ul>
-      <div style="background: #fbf6ec; border: 1px solid #e8dec5; border-radius: 12px; padding: 20px; margin: 20px 0;">
-        <p style="font-size: 13px; margin: 0 0 6px; color: #b8843a; text-transform: uppercase; letter-spacing: 0.06em;"><strong>The one area we would look at first</strong></p>
-        <p style="font-size: 15px; margin: 0; color: #1a2332;">${escHtml(n.recapFocusArea)}</p>
-        ${n.recapImpactLine ? '<p style="font-size: 14px; margin: 10px 0 0; color: #5d6b80;">' + escHtml(n.recapImpactLine) + '</p>' : ''}
+    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:600px;margin:0 auto;color:#374151;line-height:1.6">
+      <p style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#9a8a6a;margin:0">AI Growth Catalyst · ${escHtml(dateStr)}</p>
+      <h1 style="font-size:26px;color:#1a2332;margin:6px 0 2px">AI Opportunity Snapshot</h1>
+      <p style="font-size:17px;color:#c85a3e;margin:0"><strong>${escHtml(businessName)}</strong></p>
+      ${sn.businessLine ? '<p style="font-size:13px;color:#5d6b80;margin:2px 0 0">' + escHtml(sn.businessLine) + '</p>' : ''}
+      <p style="font-size:15px;margin:18px 0 0">Hi ${escHtml(first)}, thanks for the call. Here is your free snapshot: a short version of the full roadmap, covering what you told us and the one place we would start.</p>
+      ${sectionHead('01', 'Executive summary')}
+      <p style="font-size:15px;margin:0">${escHtml(sn.executiveSummary)}</p>
+      ${sectionHead('02', 'What we heard')}
+      ${pain}
+      ${sectionHead('03', 'Recommended starting point')}
+      <div style="background:#fbf6ec;border:1px solid #e8dec5;border-radius:12px;padding:16px">
+        <p style="margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#b8843a"><strong>Quick win #1</strong></p>
+        <p style="margin:0 0 8px;font-size:18px;color:#1a2332"><strong>${escHtml(sp.name)}</strong></p>
+        <p style="margin:0 0 12px;font-size:14px;color:#374151">${escHtml(sp.whatChanges)}</p>
+        <table role="presentation" style="width:100%;border-collapse:collapse"><tr>${tile('Time to live', sp.timeToLive)}${tile('Estimated saving', sp.estimatedSaving)}</tr><tr>${tile('Team effort', sp.teamEffort)}${tile('Workflow disruption', sp.workflowDisruption)}</tr></table>
+        ${sp.whyThisFirst ? '<p style="margin:10px 0 0;font-size:14px;color:#374151"><strong>Why this first:</strong> ' + escHtml(sp.whyThisFirst) + '</p>' : ''}
       </div>
-      <p style="font-size: 15px; margin-bottom: 12px;"><strong>What happens next</strong></p>
-      <p style="font-size: 14px; margin-bottom: 12px; color: #5d6b80;">A person is reviewing your call now and will come back to you within 24 hours. If it looks like a good fit, we will send details of a fixed-price roadmap (£350) that ranks every opportunity we found, explains how each would work and what it would involve, and sets out the order to tackle them in. No obligation either way.</p>
-      <p style="font-size: 15px;">If anything came to mind after the call, just reply to this email.</p>
-      <p style="font-size: 15px; margin-top: 24px;">Speak soon,<br/><strong>The AI Growth Catalyst team</strong></p>
-      <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 32px 0;" />
-      <p style="font-size: 12px; color: #9CA3AF;">AI Growth Catalyst · Helping small and medium-sized businesses navigate AI without the hype.</p>
+      <div style="margin-top:24px;padding:16px;border:1px dashed #c9bfa5;border-radius:12px;background:#faf7f0">
+        <p style="margin:0 0 6px;font-size:14px;color:#1a2332"><strong>This snapshot covers your single strongest opportunity.</strong></p>
+        <p style="margin:0;font-size:14px;color:#5d6b80">${oppCount > 1 ? 'We identified ' + oppCount + ' opportunities on the call. ' : ''}The full bespoke roadmap sets out every one of them on a priority matrix, with a phased plan and honest caveats on where AI won't help. It is £350, a fixed fee, delivered within 48 hours of payment, and only if you choose it. No obligation either way.</p>
+      </div>
+      <p style="font-size:15px;margin-top:20px">If anything here doesn't ring true, or you thought of something after the call, just reply and tell us.</p>
+      <p style="font-size:15px;margin-top:20px">Speak soon,<br/><strong>The AI Growth Catalyst team</strong></p>
+      <hr style="border:none;border-top:1px solid #E5E7EB;margin:28px 0"/>
+      <p style="font-size:12px;color:#9CA3AF">AI Growth Catalyst · Helping small and medium-sized businesses navigate AI without the hype.</p>
     </div>`;
-  const text = 'Subject: ' + subject + '\n\nHi ' + first + ',\n\nThanks again for the time on the call. Here is what stood out about ' + businessName + ':\n' +
-    bullets.map(b => '- ' + b).join('\n') + '\n\nThe one area we would look at first: ' + n.recapFocusArea +
-    (n.recapImpactLine ? '\n' + n.recapImpactLine : '') +
-    '\n\nWhat happens next: a person is reviewing your call now and will come back to you within 24 hours. If it looks like a good fit, we will send details of a fixed-price roadmap (£350) that ranks every opportunity we found, explains how each would work and what it would involve, and sets out the order to tackle them in. No obligation either way.\n\nSpeak soon,\nThe AI Growth Catalyst team';
+  const text = 'Subject: ' + subject + '\n\nAI Opportunity Snapshot — ' + businessName + (sn.businessLine ? '\n' + sn.businessLine : '') +
+    '\n\nHi ' + first + ', thanks for the call. Here is your free snapshot.\n\n01 EXECUTIVE SUMMARY\n' + sn.executiveSummary +
+    '\n\n02 WHAT WE HEARD\n' + sn.painPoints.slice(0, 3).map((p, i) => (i + 1) + '. ' + p.title + (p.description ? ' — ' + p.description : '') + (p.quote ? '\n   "' + p.quote + '"' : '')).join('\n') +
+    '\n\n03 RECOMMENDED STARTING POINT — Quick win #1: ' + sp.name + '\n' + sp.whatChanges +
+    '\nTime to live: ' + sp.timeToLive + '\nEstimated saving: ' + sp.estimatedSaving + '\nTeam effort: ' + sp.teamEffort + '\nWorkflow disruption: ' + sp.workflowDisruption +
+    (sp.whyThisFirst ? '\nWhy this first: ' + sp.whyThisFirst : '') +
+    '\n\nThis snapshot covers your single strongest opportunity.' + (oppCount > 1 ? ' We identified ' + oppCount + ' on the call.' : '') +
+    ' The full bespoke roadmap (£350, fixed fee, delivered within 48 hours of payment, only if you choose it) sets out every opportunity on a priority matrix, with a phased plan and honest caveats.\n\nSpeak soon,\nThe AI Growth Catalyst team';
   return { subject, html, text };
 }
 
-async function sendClientRecap(toEmail, rawNotes, clientName, businessName) {
+async function sendClientSnapshot(toEmail, rawNotes, clientName, businessName) {
   if (!RESEND_API_KEY) return { skipped: true };
-  const { subject, html } = buildRecapEmail(rawNotes, clientName, businessName);
+  const { subject, html } = buildSnapshotEmail(rawNotes, clientName, businessName);
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
@@ -438,8 +504,8 @@ async function sendClientRecap(toEmail, rawNotes, clientName, businessName) {
   });
   if (!r.ok) {
     const errText = await r.text();
-    console.error('Client recap email error', r.status, errText);
-    throw new Error('Client recap failed: ' + r.status + ' ' + errText.slice(0, 200));
+    console.error('Client snapshot email error', r.status, errText);
+    throw new Error('Client snapshot failed: ' + r.status + ' ' + errText.slice(0, 200));
   }
   return await r.json();
 }
@@ -537,10 +603,14 @@ function buildInternalNotesDocx(rawNotes, meta) {
     children.push(heading('Gaps To Ask About (follow-up email)'));
     notes.gapQuestions.forEach(function(q) { children.push(bullet(q)); });
   }
-  if (recapUsable(rawNotes)) {
-    children.push(heading('Draft Client Email (Tier 1 recap)'));
-    children.push(body('Check before sending. It names the focus area but gives no solution, tools or price.'));
-    buildRecapEmail(rawNotes, meta.clientName, meta.businessName).text.split('\n').forEach(function(line) { children.push(body(line)); });
+  if (snapshotUsable(rawNotes)) {
+    children.push(heading('Draft Client Snapshot (Tier 1)'));
+    children.push(body('Check before sending. Same sections and metrics as the full roadmap.'));
+    buildSnapshotEmail(rawNotes, meta.clientName, meta.businessName).text.split('\n').forEach(function(line) { children.push(body(line)); });
+    if (notes.snapshotChecks && notes.snapshotChecks.length) {
+      children.push(heading('Check Before Sending'));
+      notes.snapshotChecks.forEach(function(q) { children.push(bullet(q)); });
+    }
   }
   if (notes.businessOverview) { children.push(heading('Business Overview')); children.push(body(notes.businessOverview)); }
   if (notes.currentSystems?.length) { children.push(heading('Current Systems & Tools')); notes.currentSystems.forEach(s => children.push(bullet(s))); }
@@ -638,28 +708,30 @@ async function sendClientAcknowledgement(toEmail, clientName, businessName) {
 // ============================================================
 //  Draft roadmap (the £350 product) — generated for YES-verdict calls, reviewed by you before it goes out
 // ============================================================
-const ROADMAP_PROMPT = `You are a senior, vendor-neutral AI and automation consultant writing a draft roadmap for a small or medium business owner, based on a short discovery call. A human consultant will review and edit your draft before the client sees it, so be useful, specific and honest rather than impressive.
+const ROADMAP_PROMPT = `You are a senior, vendor-neutral AI and automation consultant writing a draft bespoke roadmap for a small or medium business owner, based on a discovery call. A human consultant reviews and edits your draft before the client sees it, so be useful, specific and honest rather than impressive.
 
-WRITE FOR THE BUSINESS OWNER: plain English, UK spelling, no jargon, no hype. Address "you" / "your business". Warm but professional.
+FORMAT: the roadmap follows the same seven sections as our published example, and it is the FULL version of the free snapshot the client already received. The snapshot's pain points and starting point are in the notes (notes.snapshot). Keep your starting point consistent with that snapshot (same opportunity, same metrics) unless the transcript clearly shows a better one; if you change it, say why in reviewerChecks.
+
+WRITE FOR THE BUSINESS OWNER: plain English, UK spelling, no jargon, no hype. Warm but professional.
 
 GROUND EVERYTHING IN THE CALL:
-- Use the client's own words, tools, team size and figures. Never invent a number, a tool they use, a customer count or a saving. If a figure was not stated, say it was not stated and put it in the open questions.
-- Impact must come from figures the client actually gave (simple arithmetic on them is fine). Otherwise describe impact qualitatively.
-- Effort estimates are INDICATIVE bands (e.g. "about 1-2 weeks of setup") and must be labelled indicative. Do NOT quote prices for the work, and do not quote software subscription prices.
+- Use the client's own words, tools, team size and figures. Never invent a number, a tool they use, a customer count or a saving.
+- Savings and impact come from figures the client actually gave (simple arithmetic is fine, shown with "~"). Where no figure was given, say so and describe the impact qualitatively.
+- Timelines and effort are realistic estimates, labelled as estimates. Do NOT quote build prices or software subscription prices.
+- "Industry data suggests…" claims only where you are confident, and list every such claim in reviewerChecks.
 
-PRIORITIES (3 to 5, ranked best first by value against effort):
-- theProblem: what happens today, in their terms.
-- whyItMatters: what it costs them (time, missed follow-up, risk), using their figures only.
-- proposedApproach: what would change, in plain English. Describe what it does, not the technology.
-- approachType: use existing tools better / off-the-shelf tool / light custom build / larger custom build. Prefer the simplest thing that works; say so when the answer is "your current system already does this".
-- Tools: describe the type of tool (e.g. "workflow automation connecting your CRM and email") rather than pushing a brand. If you name an example product, flag it in reviewerChecks to be verified.
-- whatWeNeedFromYou, risks, and a successMeasure you could check in 30 days.
+SECTIONS:
+01 executiveSummary: one paragraph: the business, the headline friction, how many opportunities you found, and the single best starting point.
+02 keyFigures (3-4 stated facts as value + label, e.g. "9" / "Team members") and currentSystems (a short paragraph on the tools and how they connect).
+03 painPoints: EVERY pain point raised, ranked by impact, each with title, description and, where one exists, a verbatim client quote.
+04 opportunities: EVERY AI opportunity you can justify from the call (aim for 6-12, never pad). For each: name, quadrant (quick_win = high impact and easy; challenge = high impact and difficult; fill_in = low impact and easy; low_priority = low impact and difficult) and a one-line note.
+05 startingPoint: the one thing to do first: name, whatChanges, timeToLive, estimatedSaving, teamEffort, workflowDisruption, whyThisFirst.
+06 phases: 3 phases (quick wins, strategic, optimisation), each with phase, timeframe, title, description and items.
+07 caveats: honest caveats, including where AI will NOT help or where a task is risky (title + detail). Include at least one.
 
-ALSO: a phased plan (quick win first), things we recommend NOT automating yet and why, assumptions and open questions, and next steps.
+HONESTY: if an opportunity is weak, small or risky, say so. Do not oversell AI.
 
-HONESTY: if an opportunity is weak, small or risky, say so. It is better to recommend two strong priorities than five padded ones. Do not oversell AI.
-
-reviewerChecks (INTERNAL, never shown to the client): list every claim, estimate, tool example or assumption the human consultant should verify or adjust before sending, and anything the call did not give you enough evidence for.
+reviewerChecks (INTERNAL, never shown to the client): every claim, estimate, tool example or assumption the human consultant should verify before sending, and anything the call did not give enough evidence for.
 
 Record the roadmap by calling the record_roadmap tool.`;
 
@@ -670,44 +742,45 @@ const ROADMAP_TOOL = {
     type: 'object',
     properties: {
       executiveSummary: { type: 'string' },
-      whatWeHeard: { type: 'array', items: { type: 'string' } },
-      priorities: {
+      keyFigures: { type: 'array', items: { type: 'object', properties: { value: { type: 'string' }, label: { type: 'string' } }, required: ['value', 'label'] } },
+      currentSystems: { type: 'string' },
+      painPoints: {
+        type: 'array',
+        items: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, quote: { type: 'string' } }, required: ['title', 'description'] }
+      },
+      opportunities: {
         type: 'array',
         items: {
           type: 'object',
           properties: {
             name: { type: 'string' },
-            theProblem: { type: 'string' },
-            whyItMatters: { type: 'string' },
-            proposedApproach: { type: 'string' },
-            approachType: { type: 'string' },
-            indicativeEffort: { type: 'string' },
-            whatWeNeedFromYou: { type: 'array', items: { type: 'string' } },
-            risks: { type: 'array', items: { type: 'string' } },
-            successMeasure: { type: 'string' }
+            quadrant: { type: 'string', enum: ['quick_win', 'challenge', 'fill_in', 'low_priority'] },
+            note: { type: 'string' }
           },
-          required: ['name', 'theProblem', 'proposedApproach', 'approachType', 'indicativeEffort']
+          required: ['name', 'quadrant']
         }
       },
-      phasedPlan: {
+      startingPoint: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' }, whatChanges: { type: 'string' }, timeToLive: { type: 'string' },
+          estimatedSaving: { type: 'string' }, teamEffort: { type: 'string' },
+          workflowDisruption: { type: 'string' }, whyThisFirst: { type: 'string' }
+        },
+        required: ['name', 'whatChanges', 'timeToLive', 'estimatedSaving', 'teamEffort', 'workflowDisruption', 'whyThisFirst']
+      },
+      phases: {
         type: 'array',
         items: {
           type: 'object',
-          properties: {
-            phase: { type: 'string' },
-            timeframe: { type: 'string' },
-            focus: { type: 'string' },
-            outcomes: { type: 'array', items: { type: 'string' } }
-          },
-          required: ['phase', 'focus']
+          properties: { phase: { type: 'string' }, timeframe: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, items: { type: 'array', items: { type: 'string' } } },
+          required: ['phase', 'title']
         }
       },
-      notRecommendedYet: { type: 'array', items: { type: 'string' } },
-      assumptionsAndOpenQuestions: { type: 'array', items: { type: 'string' } },
-      nextSteps: { type: 'array', items: { type: 'string' } },
+      caveats: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, detail: { type: 'string' } }, required: ['title', 'detail'] } },
       reviewerChecks: { type: 'array', items: { type: 'string' } }
     },
-    required: ['executiveSummary', 'whatWeHeard', 'priorities', 'phasedPlan', 'reviewerChecks']
+    required: ['executiveSummary', 'painPoints', 'opportunities', 'startingPoint', 'phases', 'caveats', 'reviewerChecks']
   }
 };
 
@@ -753,74 +826,71 @@ async function generateRoadmap(rawNotes, transcript, clientName, businessName) {
 }
 
 function normaliseRoadmap(rm) {
-  const lst = x => Array.isArray(x) ? x.map(toText).filter(Boolean) : (x ? [toText(x)] : []);
   return {
     executiveSummary: toText(rm.executiveSummary),
-    whatWeHeard: lst(rm.whatWeHeard),
-    priorities: (Array.isArray(rm.priorities) ? rm.priorities : []).filter(o => o && typeof o === 'object').map(o => ({
-      name: toText(o.name), theProblem: toText(o.theProblem), whyItMatters: toText(o.whyItMatters),
-      proposedApproach: toText(o.proposedApproach), approachType: toText(o.approachType),
-      indicativeEffort: toText(o.indicativeEffort), successMeasure: toText(o.successMeasure),
-      whatWeNeedFromYou: lst(o.whatWeNeedFromYou), risks: lst(o.risks)
-    })),
-    phasedPlan: (Array.isArray(rm.phasedPlan) ? rm.phasedPlan : []).filter(o => o && typeof o === 'object').map(o => ({
-      phase: toText(o.phase), timeframe: toText(o.timeframe), focus: toText(o.focus), outcomes: lst(o.outcomes)
-    })),
-    notRecommendedYet: lst(rm.notRecommendedYet),
-    assumptionsAndOpenQuestions: lst(rm.assumptionsAndOpenQuestions),
-    nextSteps: lst(rm.nextSteps),
-    reviewerChecks: lst(rm.reviewerChecks)
+    keyFigures: (Array.isArray(rm.keyFigures) ? rm.keyFigures : []).filter(o => o && typeof o === 'object').map(o => ({ value: toText(o.value), label: toText(o.label) })),
+    currentSystems: toText(rm.currentSystems),
+    painPoints: normalisePainPoints(rm.painPoints),
+    opportunities: (Array.isArray(rm.opportunities) ? rm.opportunities : []).filter(o => o && typeof o === 'object').map(o => ({ name: toText(o.name), quadrant: toText(o.quadrant), note: toText(o.note) })),
+    startingPoint: normaliseStartingPoint(rm.startingPoint),
+    phases: (Array.isArray(rm.phases) ? rm.phases : []).filter(o => o && typeof o === 'object').map(o => ({ phase: toText(o.phase), timeframe: toText(o.timeframe), title: toText(o.title), description: toText(o.description), items: toList(o.items) })),
+    caveats: (Array.isArray(rm.caveats) ? rm.caveats : []).filter(o => o && typeof o === 'object').map(o => ({ title: toText(o.title), detail: toText(o.detail) })),
+    reviewerChecks: toList(rm.reviewerChecks)
   };
 }
 
 function buildRoadmapDocx(rawRoadmap, meta) {
   const rm = normaliseRoadmap(rawRoadmap);
   const { clientName, businessName, dateStr } = meta;
-  const heading = (text) => new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 120 },
-    children: [new TextRun({ text, bold: true, size: 30, color: '1A2332' })] });
-  const sub = (text) => new Paragraph({ spacing: { before: 200, after: 60 },
-    children: [new TextRun({ text, bold: true, size: 24, color: 'C85A3E' })] });
+  const num = (n, t, sub) => [
+    new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 440, after: 60 }, children: [
+      new TextRun({ text: n + '  ', bold: true, size: 22, color: 'C85A3E' }), new TextRun({ text: t, bold: true, size: 32, color: '1A2332' })] }),
+    ...(sub ? [new Paragraph({ spacing: { after: 140 }, children: [new TextRun({ text: sub, italics: true, size: 20, color: '6B7280' })] })] : [])
+  ];
+  const sub = (text) => new Paragraph({ spacing: { before: 200, after: 60 }, children: [new TextRun({ text, bold: true, size: 24, color: '1A2332' })] });
   const label = (l, t) => new Paragraph({ spacing: { after: 100 }, children: [
     new TextRun({ text: l + ' ', bold: true, size: 22, color: '1F2937' }), new TextRun({ text: t, size: 22, color: '374151' })] });
   const body = (text) => new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text, size: 22, color: '374151' })] });
-  const bullet = (text) => new Paragraph({ numbering: { reference: 'bullets', level: 0 }, spacing: { after: 80 },
-    children: [new TextRun({ text, size: 22, color: '374151' })] });
+  const bullet = (text) => new Paragraph({ numbering: { reference: 'bullets', level: 0 }, spacing: { after: 80 }, children: [new TextRun({ text, size: 22, color: '374151' })] });
+  const quote = (text) => new Paragraph({ spacing: { before: 60, after: 100 }, indent: { left: 360 },
+    border: { left: { style: BorderStyle.SINGLE, size: 16, color: 'C85A3E', space: 8 } }, children: [new TextRun({ text: '"' + text + '"', italics: true, size: 22, color: '4B5563' })] });
 
   const c = [];
-  c.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: 'Your AI & Automation Roadmap', bold: true, size: 44, color: '1A2332' })] }));
-  c.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: businessName, size: 30, color: 'C85A3E', bold: true })] }));
+  c.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: 'BESPOKE AI ROADMAP', bold: true, size: 18, color: 'B8843A' })] }));
+  c.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'Where AI actually fits at ' + businessName + '.', bold: true, size: 44, color: '1A2332' })] }));
   c.push(new Paragraph({ spacing: { after: 300 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'C85A3E', space: 4 } },
     children: [new TextRun({ text: 'Prepared for ' + clientName + ' · ' + dateStr + ' · AI Growth Catalyst', italics: true, size: 18, color: 'B8843A' })] }));
 
-  c.push(heading('Summary')); c.push(body(rm.executiveSummary));
-  if (rm.whatWeHeard.length) { c.push(heading('What we heard')); rm.whatWeHeard.forEach(t => c.push(bullet(t))); }
+  c.push(...num('01', 'Executive summary', 'The headline findings from the discovery call.')); c.push(body(rm.executiveSummary));
+  c.push(...num('02', 'Business overview', 'How the business operates today, based on the discovery call.'));
+  rm.keyFigures.forEach(f => c.push(bullet(f.value + ' — ' + f.label)));
+  if (rm.currentSystems) { c.push(sub('Current systems & tools')); c.push(body(rm.currentSystems)); }
+  c.push(...num('03', 'Identified pain points', 'The operational frustrations described during the call, ranked by impact.'));
+  rm.painPoints.forEach((p, i) => { c.push(sub((i + 1) + '. ' + p.title)); if (p.description) c.push(body(p.description)); if (p.quote) c.push(quote(p.quote)); });
 
-  c.push(heading('Where to start — your priorities'));
-  rm.priorities.forEach((p, i) => {
-    c.push(sub((i + 1) + '. ' + p.name));
-    if (p.theProblem) c.push(label('The problem today:', p.theProblem));
-    if (p.whyItMatters) c.push(label('Why it matters:', p.whyItMatters));
-    if (p.proposedApproach) c.push(label('What would change:', p.proposedApproach));
-    c.push(label('Approach:', p.approachType + (p.indicativeEffort ? ' · Indicative effort: ' + p.indicativeEffort : '')));
-    if (p.whatWeNeedFromYou.length) { c.push(label('What we would need from you:', '')); p.whatWeNeedFromYou.forEach(t => c.push(bullet(t))); }
-    if (p.risks.length) { c.push(label('Risks to watch:', '')); p.risks.forEach(t => c.push(bullet(t))); }
-    if (p.successMeasure) c.push(label('How you would know it worked:', p.successMeasure));
+  c.push(...num('04', 'Priority matrix', 'Each opportunity by ease of implementation and potential impact.'));
+  const groups = [['quick_win', 'Quick wins — high impact, easy. Do first.'], ['challenge', 'Challenges — high impact, difficult. Plan.'],
+    ['fill_in', 'Fill-ins — low impact, easy. If time.'], ['low_priority', 'Low priority — low impact, difficult. Avoid.']];
+  groups.forEach(function(g) {
+    const items = rm.opportunities.filter(o => o.quadrant === g[0]);
+    if (!items.length) return;
+    c.push(sub(g[1])); items.forEach(o => c.push(bullet(o.name + (o.note ? ' — ' + o.note : ''))));
   });
 
-  if (rm.phasedPlan.length) {
-    c.push(heading('Suggested order of work'));
-    rm.phasedPlan.forEach(ph => {
-      c.push(sub(ph.phase + (ph.timeframe ? ' (' + ph.timeframe + ')' : '')));
-      if (ph.focus) c.push(body(ph.focus));
-      ph.outcomes.forEach(t => c.push(bullet(t)));
-    });
-  }
-  if (rm.notRecommendedYet.length) { c.push(heading('What we would not automate yet')); rm.notRecommendedYet.forEach(t => c.push(bullet(t))); }
-  if (rm.assumptionsAndOpenQuestions.length) { c.push(heading('Assumptions and open questions')); rm.assumptionsAndOpenQuestions.forEach(t => c.push(bullet(t))); }
-  c.push(heading('Next steps'));
-  (rm.nextSteps.length ? rm.nextSteps : ['Review this roadmap and tell us which priority you would like to start with.']).forEach(t => c.push(bullet(t)));
-  c.push(heading('About this roadmap'));
-  c.push(body('This roadmap is yours to keep and use however you like, including with another provider or your own team. If you would like us to build any of it, we will quote for that separately, once you have chosen where to start. Effort estimates are indicative and will be firmed up once the work is scoped.'));
+  const sp = rm.startingPoint;
+  c.push(...num('05', 'Recommended starting point', 'If you do nothing else from this roadmap, do this.'));
+  c.push(sub('Quick win #1: ' + sp.name)); c.push(body(sp.whatChanges));
+  c.push(label('Time to live:', sp.timeToLive)); c.push(label('Estimated saving:', sp.estimatedSaving));
+  c.push(label('Team effort:', sp.teamEffort)); c.push(label('Workflow disruption:', sp.workflowDisruption));
+  if (sp.whyThisFirst) c.push(label('Why this first:', sp.whyThisFirst));
+
+  c.push(...num('06', 'Implementation phases', 'A realistic sequence for tackling the rest of the roadmap.'));
+  rm.phases.forEach(ph => { c.push(sub(ph.phase + (ph.timeframe ? ' · ' + ph.timeframe : '') + (ph.title ? ' — ' + ph.title : ''))); if (ph.description) c.push(body(ph.description)); ph.items.forEach(t => c.push(bullet(t))); });
+
+  c.push(...num('07', 'Honest caveats', 'Things to be aware of before implementing any of this.'));
+  rm.caveats.forEach(cv => { c.push(sub(cv.title)); c.push(body(cv.detail)); });
+  c.push(new Paragraph({ spacing: { before: 400 }, border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'E5E7EB', space: 6 } }, children: [new TextRun({
+    text: 'This roadmap is yours to keep and use however you like. If you would like us to build any of it, we quote per project, only where the roadmap shows a clear return, and you own everything we build. Time and saving estimates are based on what you told us and will be firmed up when the work is scoped.', italics: true, size: 20, color: '6B7280' })] }));
 
   const doc = new Document({
     creator: 'AI Growth Catalyst', title: 'Roadmap - ' + businessName,
@@ -1151,12 +1221,12 @@ app.post('/api/save-transcript', async (req, res) => {
       };
     }
 
-    // Client email: with AUTO_SEND_RECAP=true and a usable strong/moderate-fit recap, send the Tier 1 recap;
-    // otherwise (default) send the generic acknowledgement and leave the recap as a draft for you.
-    const autoRecap = process.env.AUTO_SEND_RECAP === 'true' && notes && recapUsable(notes);
+    // Client email: with AUTO_SEND_SNAPSHOT=true and a usable strong/moderate-fit snapshot, send the Tier 1 snapshot;
+    // otherwise (default) send the generic acknowledgement and leave the snapshot as a draft for you.
+    const autoSnapshot = process.env.AUTO_SEND_SNAPSHOT === 'true' && notes && snapshotUsable(notes);
     try {
-      const sent = autoRecap
-        ? await sendClientRecap(email, notes, clientName, businessName)
+      const sent = autoSnapshot
+        ? await sendClientSnapshot(email, notes, clientName, businessName)
         : await sendClientAcknowledgement(email, clientName, businessName);
       clientEmailed = !sent.skipped;
     } catch (err) {
@@ -1172,12 +1242,14 @@ app.post('/api/save-transcript', async (req, res) => {
         durationStr: Math.floor(durationSeconds / 60) + ' min ' + (durationSeconds % 60) + ' sec'
       });
       let afterHtml = '';
-      if (recapUsable(notes)) {
-        const d = buildRecapEmail(notes, clientName, businessName);
-        afterHtml = '<hr/><p><strong>' + (autoRecap ? 'Sent to the client automatically' : 'Draft client email — not sent. Review, then forward or paste') + ':</strong></p>' +
-          '<p><em>Subject: ' + escHtml(d.subject) + '</em></p><div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">' + d.html + '</div>';
+      if (snapshotUsable(notes)) {
+        const d = buildSnapshotEmail(notes, clientName, businessName);
+        afterHtml = '<hr/><p><strong>' + (autoSnapshot ? 'Sent to the client automatically' : 'Draft client snapshot — not sent. Review, then forward or paste') + ':</strong></p>' +
+          '<p><em>Subject: ' + escHtml(d.subject) + '</em></p><div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">' + d.html + '</div>'
+        const sc = normaliseNotes(notes).snapshotChecks || [];
+        if (sc.length) afterHtml += '<p><strong>Check before sending:</strong></p><ul>' + sc.map(c => '<li>' + escHtml(c) + '</li>').join('') + '</ul>';
       } else {
-        afterHtml = '<hr/><p><em>No client recap drafted — fit was weak or the AI had too little to go on. The client received the generic acknowledgement.</em></p>';
+        afterHtml = '<hr/><p><em>No client snapshot drafted — fit was weak or the AI had too little to go on. The client received the generic acknowledgement.</em></p>';
       }
       if (!roadmapJob) afterHtml += roadmapLinkHtml(sheetRow);
       const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.shouldOfferRoadmap, { afterHtml });
