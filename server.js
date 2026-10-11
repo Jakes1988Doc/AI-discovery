@@ -27,6 +27,10 @@ const {
   LevelFormat, BorderStyle
 } = require('docx');
 
+let renderRoadmapHtml = null;
+try { renderRoadmapHtml = require('./roadmap-view').renderRoadmapHtml; }
+catch (e) { console.error('roadmap-view.js could not be loaded — roadmap pages disabled:', e.message); }
+
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false }));
@@ -839,84 +843,111 @@ function normaliseRoadmap(rm) {
   };
 }
 
-function buildRoadmapDocx(rawRoadmap, meta) {
-  const rm = normaliseRoadmap(rawRoadmap);
-  const { clientName, businessName, dateStr } = meta;
-  const num = (n, t, sub) => [
-    new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 440, after: 60 }, children: [
-      new TextRun({ text: n + '  ', bold: true, size: 22, color: 'C85A3E' }), new TextRun({ text: t, bold: true, size: 32, color: '1A2332' })] }),
-    ...(sub ? [new Paragraph({ spacing: { after: 140 }, children: [new TextRun({ text: sub, italics: true, size: 20, color: '6B7280' })] })] : [])
-  ];
-  const sub = (text) => new Paragraph({ spacing: { before: 200, after: 60 }, children: [new TextRun({ text, bold: true, size: 24, color: '1A2332' })] });
-  const label = (l, t) => new Paragraph({ spacing: { after: 100 }, children: [
-    new TextRun({ text: l + ' ', bold: true, size: 22, color: '1F2937' }), new TextRun({ text: t, size: 22, color: '374151' })] });
-  const body = (text) => new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text, size: 22, color: '374151' })] });
-  const bullet = (text) => new Paragraph({ numbering: { reference: 'bullets', level: 0 }, spacing: { after: 80 }, children: [new TextRun({ text, size: 22, color: '374151' })] });
-  const quote = (text) => new Paragraph({ spacing: { before: 60, after: 100 }, indent: { left: 360 },
-    border: { left: { style: BorderStyle.SINGLE, size: 16, color: 'C85A3E', space: 8 } }, children: [new TextRun({ text: '"' + text + '"', italics: true, size: 22, color: '4B5563' })] });
-
-  const c = [];
-  c.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: 'BESPOKE AI ROADMAP', bold: true, size: 18, color: 'B8843A' })] }));
-  c.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'Where AI actually fits at ' + businessName + '.', bold: true, size: 44, color: '1A2332' })] }));
-  c.push(new Paragraph({ spacing: { after: 300 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'C85A3E', space: 4 } },
-    children: [new TextRun({ text: 'Prepared for ' + clientName + ' · ' + dateStr + ' · AI Growth Catalyst', italics: true, size: 18, color: 'B8843A' })] }));
-
-  c.push(...num('01', 'Executive summary', 'The headline findings from the discovery call.')); c.push(body(rm.executiveSummary));
-  c.push(...num('02', 'Business overview', 'How the business operates today, based on the discovery call.'));
-  rm.keyFigures.forEach(f => c.push(bullet(f.value + ' — ' + f.label)));
-  if (rm.currentSystems) { c.push(sub('Current systems & tools')); c.push(body(rm.currentSystems)); }
-  c.push(...num('03', 'Identified pain points', 'The operational frustrations described during the call, ranked by impact.'));
-  rm.painPoints.forEach((p, i) => { c.push(sub((i + 1) + '. ' + p.title)); if (p.description) c.push(body(p.description)); if (p.quote) c.push(quote(p.quote)); });
-
-  c.push(...num('04', 'Priority matrix', 'Each opportunity by ease of implementation and potential impact.'));
-  const groups = [['quick_win', 'Quick wins — high impact, easy. Do first.'], ['challenge', 'Challenges — high impact, difficult. Plan.'],
-    ['fill_in', 'Fill-ins — low impact, easy. If time.'], ['low_priority', 'Low priority — low impact, difficult. Avoid.']];
-  groups.forEach(function(g) {
-    const items = rm.opportunities.filter(o => o.quadrant === g[0]);
-    if (!items.length) return;
-    c.push(sub(g[1])); items.forEach(o => c.push(bullet(o.name + (o.note ? ' — ' + o.note : ''))));
+// ---- Hosted roadmap pages: stored in a "Roadmaps" tab of your Google Sheet, served at /r/<token> ----
+const roadmapCache = new Map();
+function sheetsClient() {
+  const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(SVC_JSON), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  return google.sheets({ version: 'v4', auth });
+}
+async function ensureRoadmapTab(sheets) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const has = (meta.data.sheets || []).some(sh => sh.properties && sh.properties.title === 'Roadmaps');
+  if (!has) {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: 'Roadmaps' } } }] } });
+    await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: 'Roadmaps!A1:H1', valueInputOption: 'RAW',
+      requestBody: { values: [['Token', 'Created', 'Business', 'Client', 'Email', 'Call date', 'Roadmap JSON', 'Status']] } });
+  }
+}
+function monthYearNow() { return new Date().toLocaleString('en-GB', { month: 'long', year: 'numeric' }); }
+async function storeRoadmap(data, meta) {
+  if (!(SHEET_ID && SVC_JSON)) throw new Error('Google Sheet not configured');
+  const token = crypto.randomBytes(18).toString('base64url');
+  const record = { data: data, meta: { clientName: meta.clientName, businessName: meta.businessName, email: meta.email, callDate: meta.dateStr, monthYear: monthYearNow() } };
+  const json = JSON.stringify(record);
+  if (json.length > 48000) throw new Error('Roadmap too large for one sheet cell (' + json.length + ' chars)');
+  const sheets = sheetsClient();
+  await ensureRoadmapTab(sheets);
+  await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: 'Roadmaps!A1', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [[token, new Date().toISOString(), meta.businessName, meta.clientName, meta.email, meta.dateStr, json, 'draft']] } });
+  roadmapCache.set(token, record);
+  return token;
+}
+async function findRoadmapRow(sheets, token) {
+  const col = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Roadmaps!A:A' });
+  const rows = col.data.values || [];
+  for (let i = 1; i < rows.length; i++) if (rows[i][0] === token) return i + 1;
+  return null;
+}
+async function loadRoadmap(token) {
+  if (roadmapCache.has(token)) return roadmapCache.get(token);
+  if (!/^[A-Za-z0-9_-]{20,40}$/.test(token) || !(SHEET_ID && SVC_JSON)) return null;
+  const sheets = sheetsClient();
+  const row = await findRoadmapRow(sheets, token);
+  if (!row) return null;
+  const got = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Roadmaps!G' + row });
+  const json = ((got.data.values || [])[0] || [])[0];
+  if (!json) return null;
+  const record = JSON.parse(json);
+  roadmapCache.set(token, record);
+  return record;
+}
+async function saveRoadmapRecord(token, record) {
+  const sheets = sheetsClient();
+  const row = await findRoadmapRow(sheets, token);
+  if (!row) throw new Error('roadmap row not found');
+  const json = JSON.stringify(record);
+  if (json.length > 48000) throw new Error('Roadmap too large for one sheet cell');
+  await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: 'Roadmaps!G' + row + ':H' + row, valueInputOption: 'RAW',
+    requestBody: { values: [[json, 'edited ' + new Date().toISOString()]] } });
+  roadmapCache.set(token, record);
+}
+function editSig(token) { return crypto.createHmac('sha256', process.env.ADMIN_KEY || '').update('edit:' + token).digest('hex'); }
+function validEditSig(token, sig) {
+  if (!process.env.ADMIN_KEY || !sig) return false;
+  const a = Buffer.from(editSig(token)), b = Buffer.from(String(sig));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+// Applies { "painPoints.0.title": "new text", ... } to the stored roadmap, then drops anything the editor cleared
+function applyRoadmapPatch(data, patch) {
+  const BAD = { '__proto__': 1, 'constructor': 1, 'prototype': 1 };
+  Object.keys(patch || {}).forEach(function(path) {
+    if (!/^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/.test(path)) return;
+    const parts = path.split('.');
+    if (parts.some(k => BAD[k])) return;
+    let node = data;
+    for (let i = 0; i < parts.length - 1; i++) { node = node && node[parts[i]]; if (node == null || typeof node !== 'object') return; }
+    const leaf = parts[parts.length - 1];
+    if (typeof node[leaf] !== 'string') return;
+    node[leaf] = String(patch[path] == null ? '' : patch[path]).slice(0, 4000).trim();
   });
-
-  const sp = rm.startingPoint;
-  c.push(...num('05', 'Recommended starting point', 'If you do nothing else from this roadmap, do this.'));
-  c.push(sub('Quick win #1: ' + sp.name)); c.push(body(sp.whatChanges));
-  c.push(label('Time to live:', sp.timeToLive)); c.push(label('Estimated saving:', sp.estimatedSaving));
-  c.push(label('Team effort:', sp.teamEffort)); c.push(label('Workflow disruption:', sp.workflowDisruption));
-  if (sp.whyThisFirst) c.push(label('Why this first:', sp.whyThisFirst));
-
-  c.push(...num('06', 'Implementation phases', 'A realistic sequence for tackling the rest of the roadmap.'));
-  rm.phases.forEach(ph => { c.push(sub(ph.phase + (ph.timeframe ? ' · ' + ph.timeframe : '') + (ph.title ? ' — ' + ph.title : ''))); if (ph.description) c.push(body(ph.description)); ph.items.forEach(t => c.push(bullet(t))); });
-
-  c.push(...num('07', 'Honest caveats', 'Things to be aware of before implementing any of this.'));
-  rm.caveats.forEach(cv => { c.push(sub(cv.title)); c.push(body(cv.detail)); });
-  c.push(new Paragraph({ spacing: { before: 400 }, border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'E5E7EB', space: 6 } }, children: [new TextRun({
-    text: 'This roadmap is yours to keep and use however you like. If you would like us to build any of it, we quote per project, only where the roadmap shows a clear return, and you own everything we build. Time and saving estimates are based on what you told us and will be firmed up when the work is scoped.', italics: true, size: 20, color: '6B7280' })] }));
-
-  const doc = new Document({
-    creator: 'AI Growth Catalyst', title: 'Roadmap - ' + businessName,
-    styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
-    numbering: { config: [{ reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT,
-      style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
-    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children: c }]
-  });
-  return Packer.toBuffer(doc);
+  const keep = (arr, f) => (arr || []).filter(f);
+  data.keyFigures = keep(data.keyFigures, k => k.value || k.label);
+  data.painPoints = keep(data.painPoints, p => p.title);
+  data.opportunities = keep(data.opportunities, o => o.name);
+  data.caveats = keep(data.caveats, c => c.title);
+  data.phases = keep(data.phases, ph => ph.title || ph.phase);
+  data.phases.forEach(ph => { ph.items = keep(ph.items, x => x); });
+  return data;
 }
 
-async function sendRoadmapDraft(clientName, businessName, clientEmail, docBuffer, reviewerChecks) {
+async function sendRoadmapDraft(meta, links, reviewerChecks, fallbackHtml, storeErr) {
   if (!RESEND_API_KEY || !BCC_EMAIL) return { skipped: true };
-  const filename = 'roadmap-draft-' + (businessName || 'client').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '-' + new Date().toISOString().slice(0, 10) + '.docx';
   const checks = (reviewerChecks || []).map(c => '<li>' + escHtml(c) + '</li>').join('');
-  const r = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY },
-    body: JSON.stringify({
-      from: FROM_EMAIL, to: [BCC_EMAIL],
-      subject: '[Roadmap draft] ' + businessName + ' (' + clientName + ')',
-      html: '<div style="font-family: -apple-system, sans-serif;"><p><strong>Draft £350 roadmap attached for ' + escHtml(businessName) + '</strong> (' + escHtml(clientName) + ', ' + escHtml(clientEmail) + '). It has NOT been sent to the client. Edit it, then send it yourself.</p>' +
-        '<p><strong>Check before sending:</strong></p><ul>' + (checks || '<li>No flags raised — still read it through.</li>') + '</ul></div>',
-      attachments: [{ filename, content: docBuffer.toString('base64') }]
-    })
-  });
+  const linkBlock = links
+    ? '<p><strong>Review and edit:</strong> <a href="' + links.edit + '">open edit mode</a> (click any text to change it, then Save).</p>' +
+      '<p><strong>When you are happy, send the client this link:</strong><br/><a href="' + links.view + '">' + links.view + '</a></p>' +
+      '<p style="color:#6b7280;font-size:13px">The link is private but not password-protected: anyone who has it can read the roadmap. Free-tier hosting can take up to a minute to wake the first time it is opened.</p>'
+    : '<p style="color:#b45309"><strong>The hosted page could not be saved</strong> (' + escHtml(storeErr || 'unknown reason') + '). The roadmap is attached as an HTML file instead. Open it in a browser to review; it cannot be edited online.</p>';
+  const body = {
+    from: FROM_EMAIL, to: [BCC_EMAIL],
+    subject: '[Roadmap draft] ' + meta.businessName + ' (' + meta.clientName + ')',
+    html: '<div style="font-family: -apple-system, sans-serif;"><p><strong>Draft £350 roadmap for ' + escHtml(meta.businessName) + '</strong> (' + escHtml(meta.clientName) + ', ' + escHtml(meta.email) + '). It has NOT been sent to the client.</p>' +
+      linkBlock + '<p><strong>Check before sending:</strong></p><ul>' + (checks || '<li>No flags raised — still read it through.</li>') + '</ul></div>'
+  };
+  if (!links && fallbackHtml) {
+    body.attachments = [{ filename: 'roadmap-draft-' + (meta.businessName || 'client').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.html', content: Buffer.from(fallbackHtml, 'utf8').toString('base64') }];
+  }
+  const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + RESEND_API_KEY }, body: JSON.stringify(body) });
   if (!r.ok) {
     const errText = await r.text();
     console.error('Roadmap draft email error', r.status, errText);
@@ -928,9 +959,15 @@ async function sendRoadmapDraft(clientName, businessName, clientEmail, docBuffer
 // Runs after the HTTP response has gone, so the call page never waits on it
 async function runRoadmapJob(notes, transcript, meta) {
   try {
-    const rm = await generateRoadmap(notes, transcript, meta.clientName, meta.businessName);
-    const buf = await buildRoadmapDocx(rm, meta);
-    await sendRoadmapDraft(meta.clientName, meta.businessName, meta.email, buf, normaliseRoadmap(rm).reviewerChecks);
+    if (!renderRoadmapHtml) throw new Error('roadmap-view.js is missing from the server — upload it next to server.js');
+    const data = normaliseRoadmap(await generateRoadmap(notes, transcript, meta.clientName, meta.businessName));
+    let links = null, storeErr = null;
+    try {
+      const token = await storeRoadmap(data, meta);
+      links = { view: PUBLIC_URL + '/r/' + token, edit: process.env.ADMIN_KEY ? PUBLIC_URL + '/r/' + token + '?edit=' + editSig(token) : PUBLIC_URL + '/r/' + token };
+    } catch (e) { console.error('Roadmap store failed', e); storeErr = e.message; }
+    const fallbackHtml = links ? null : renderRoadmapHtml(data, { clientName: meta.clientName, businessName: meta.businessName, callDate: meta.dateStr, monthYear: monthYearNow() }, {});
+    await sendRoadmapDraft(meta, links, data.reviewerChecks, fallbackHtml, storeErr);
     console.log('Roadmap draft emailed for', meta.businessName);
   } catch (err) {
     console.error('Roadmap job failed', err);
@@ -1081,6 +1118,44 @@ const speakHandler = async (req, res) => {
 app.post('/api/speak', speakHandler);
 app.get('/api/speak', speakHandler);
 
+
+// ============================================================
+//  Hosted roadmap pages
+//    GET  /r/:token                 the client-facing page (private link)
+//    GET  /r/:token?edit=<sig>      edit mode (only from the signed link in your draft email)
+//    POST /r/:token/save?edit=<sig> saves edits
+// ============================================================
+function roadmapNotFound(res) {
+  res.status(404).send('<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>Not found</title><body style="font-family:-apple-system,sans-serif;max-width:480px;margin:18vh auto;padding:0 20px;color:#1a2332"><h2>This page isn\'t available</h2><p>The link may be incomplete. If you were sent it by AI Growth Catalyst, please ask us for a fresh one.</p></body>');
+}
+app.get('/r/:token', async function(req, res) {
+  res.set({ 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' });
+  if (!renderRoadmapHtml) return res.status(503).send('Roadmap pages are not available right now.');
+  try {
+    const rec = await loadRoadmap(req.params.token);
+    if (!rec) return roadmapNotFound(res);
+    const edit = validEditSig(req.params.token, req.query.edit);
+    res.type('html').send(renderRoadmapHtml(rec.data, rec.meta, { edit: edit, token: req.params.token }));
+  } catch (err) {
+    console.error('Roadmap view failed', err.message);
+    res.status(500).send('Something went wrong loading this page. Please try again in a moment.');
+  }
+});
+app.post('/r/:token/save', async function(req, res) {
+  if (!validEditSig(req.params.token, req.query.edit)) return res.status(403).json({ error: 'not allowed' });
+  try {
+    const rec = await loadRoadmap(req.params.token);
+    if (!rec) return res.status(404).json({ error: 'not found' });
+    const patch = req.body && req.body.patch;
+    if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'no changes sent' });
+    rec.data = applyRoadmapPatch(rec.data, patch);
+    await saveRoadmapRecord(req.params.token, rec);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Roadmap save failed', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ============================================================
 //  On-demand roadmap — a signed link in the internal email lets you generate a draft for ANY saved call
