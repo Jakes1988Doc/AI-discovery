@@ -81,6 +81,26 @@ const TOPICS = [
   }
 ];
 
+// Debug log: always goes to the console; add ?debug to the page URL to also show it on-page
+const DEBUG = /[?&]debug/.test(window.location.search);
+let dbgEl = null;
+function dbg(msg) {
+  const t0 = (typeof state !== 'undefined' && state.startTime) ? state.startTime : Date.now();
+  const line = ((Date.now() - t0) / 1000).toFixed(1) + 's  ' + msg;
+  try { console.log('[call] ' + line); } catch (e) {}
+  if (!DEBUG) return;
+  if (!dbgEl) {
+    dbgEl = document.createElement('pre');
+    dbgEl.style.cssText = 'margin:16px;padding:12px;background:#0f172a;color:#cbd5e1;font:11px/1.5 monospace;max-height:260px;overflow:auto;border-radius:8px;white-space:pre-wrap';
+    document.body.appendChild(dbgEl);
+  }
+  dbgEl.textContent += line + '\n';
+  dbgEl.scrollTop = dbgEl.scrollHeight;
+}
+
+// How long after the last speech result we treat the answer as finished
+const SILENCE_MS = 1200;
+
 let state = {
   started: false,
   callOver: false,
@@ -273,6 +293,7 @@ function playBuffer(arrayBuffer, stale) {
 
     audio.onplaying = function() {
       started = true;
+      dbg('audio playing');
       clearTimeout(startWatchdog);
       if (!stale()) setStatus('Agent speaking…', 'speaking');
     };
@@ -294,7 +315,53 @@ function playBuffer(arrayBuffer, stale) {
   });
 }
 
-async function speak(text, onDone, opts) {
+// ---- Audio fetch + cache -------------------------------------------------
+// Next-topic openers are fixed text, so we fetch their audio while the user is still
+// answering the current question. When the time comes they play instantly.
+const audioCache = new Map();
+
+function fetchAudio(text, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(function() { ctrl.abort(); }, timeoutMs || 10000);
+  const t0 = Date.now();
+  return fetch(BACKEND_URL.replace(/\/$/, '') + '/api/speak', {
+    method: 'POST',
+    signal: ctrl.signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: text })
+  }).then(function(resp) {
+    const ct = resp.headers.get('Content-Type') || '';
+    if (!resp.ok || ct.includes('application/json')) {
+      return resp.text().then(function(body) {
+        dbg('TTS error ' + resp.status + ' ' + String(body).slice(0, 160));
+        return null;
+      });
+    }
+    return resp.arrayBuffer();
+  }).then(function(buf) {
+    clearTimeout(timer);
+    if (buf && buf.byteLength > 0) { dbg('TTS ok ' + (Date.now() - t0) + 'ms, ' + buf.byteLength + ' bytes'); return buf; }
+    return null;
+  }).catch(function(err) {
+    clearTimeout(timer);
+    dbg('TTS failed: ' + (err && err.name));
+    return null;
+  });
+}
+function prefetchAudio(text) {
+  if (text && !audioCache.has(text)) audioCache.set(text, fetchAudio(text, 15000));
+}
+async function getAudio(text) {
+  const cached = audioCache.get(text);
+  let buf = cached ? await cached : null;
+  if (!buf) { audioCache.delete(text); buf = await fetchAudio(text, 10000); }
+  return buf;
+}
+
+// speak() takes a string, or an array of strings played back-to-back (all fetched in parallel).
+// opts.prefetch = text to fetch audio for once the first clip is ready; opts.final = closing line.
+async function speak(input, onDone, opts) {
+  const parts = (Array.isArray(input) ? input : [input]).filter(Boolean);
   stopAllSpeech();
   const myToken = speakToken;
   const stale = function() { return myToken !== speakToken; };
@@ -302,47 +369,32 @@ async function speak(text, onDone, opts) {
 
   state.isSpeaking = true;
   setStatus('Connecting…', 'thinking');
+  dbg('speak: ' + parts.join(' | ').slice(0, 70) + '…');
 
   const finish = function() {
     if (stale()) return;
     state.isSpeaking = false;
     if (!isFinal) setStatus('Listening…', 'listening');
+    dbg('speak done');
     if (onDone) onDone();
   };
 
-  // 1. Fetch the ElevenLabs audio (10s limit so a sleeping backend can't leave us silent)
-  let buf = null;
-  const ctrl = new AbortController();
-  speakAbort = ctrl;
-  const fetchTimer = setTimeout(function() { ctrl.abort(); }, 10000);
-  try {
-    const response = await fetch(BACKEND_URL.replace(/\/$/, '') + '/api/speak', {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text })
-    });
-    const contentType = response.headers.get('Content-Type') || '';
-    if (response.ok && !contentType.includes('application/json')) {
-      buf = await response.arrayBuffer();
-    }
-  } catch (err) {
-    if (!stale()) console.warn('speak() fetch failed:', err);
-  }
-  clearTimeout(fetchTimer);
-  if (speakAbort === ctrl) speakAbort = null;
-  if (stale()) return;
-
-  // 2. Play it; fall back to the browser voice if it could not be heard
-  let heard = false;
-  if (buf && buf.byteLength > 0) {
-    heard = await playBuffer(buf, stale);
+  const pending = parts.map(function(t) { return getAudio(t); }); // all start now
+  for (let i = 0; i < parts.length; i++) {
+    const buf = await pending[i];
     if (stale()) return;
-  }
-  if (!heard) {
-    console.warn('ElevenLabs unavailable, using browser TTS');
-    setStatus('Agent speaking…', 'speaking');
-    await speakFallback(text);
+    if (i === 0 && opts && opts.prefetch) prefetchAudio(opts.prefetch);
+    let heard = false;
+    if (buf) {
+      heard = await playBuffer(buf, stale);
+      if (stale()) return;
+    }
+    if (!heard) {
+      dbg('using browser voice');
+      setStatus('Agent speaking…', 'speaking');
+      await speakFallback(parts[i]);
+      if (stale()) return;
+    }
   }
   finish();
 }
@@ -373,6 +425,7 @@ async function generateNextQuestion() {
     return { role: t.role === 'agent' ? 'assistant' : 'user', content: t.text };
   });
 
+  const llmStart = Date.now();
   const ctrl = new AbortController();
   const timeoutId = setTimeout(function() { ctrl.abort(); }, 15000);
   try {
@@ -400,8 +453,14 @@ async function generateNextQuestion() {
       })
     });
     clearTimeout(timeoutId);
-    if (!response.ok) throw new Error('Backend ' + response.status);
+    if (!response.ok) {
+      let detail = '';
+      try { detail = await response.text(); } catch (e) {}
+      dbg('LLM error ' + response.status + ' ' + detail.slice(0, 200));
+      throw new Error('Backend ' + response.status + (/credit|billing|balance/i.test(detail) ? ' (Anthropic credit?)' : ''));
+    }
     const decision = await response.json();
+    dbg('LLM ' + (Date.now() - llmStart) + 'ms -> ' + decision.action);
 
     // Track signal state returned by agent
     if (decision.signal_detected === true) {
@@ -417,7 +476,7 @@ async function generateNextQuestion() {
   } catch (err) {
     clearTimeout(timeoutId);
     console.error('Backend error', err);
-    showWarn('Could not reach the backend. Falling back to next topic.');
+    showWarn('The AI backend returned an error (' + (err && err.message ? err.message : 'unreachable') + '). Moving to the next topic.');
     const nextIdx = state.currentTopicIdx + 1;
     if (nextIdx >= TOPICS.length) {
       return { next_question: "Thanks for sharing all of this. Is there anything else you'd like me to know before we wrap up?", action: 'wrap_up' };
@@ -479,7 +538,11 @@ async function handleAnswerAndContinue() {
     return;
   }
 
-  // followup — track whether this is a deep probe
+  // followup — if the model gave us nothing to say, move on rather than going silent
+  if (!decision.next_question || !String(decision.next_question).trim()) {
+    moveToNextTopic();
+    return;
+  }
   state.exchangesOnTopic++;
   if (decision.is_deep_probe === true) {
     state.deepProbeUsedOnTopic = true;
@@ -497,6 +560,7 @@ async function finishCall(closing) {
   state.callOver = true;
   stopListening();
   if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+  if (state.stallInterval) { clearInterval(state.stallInterval); state.stallInterval = null; }
   pushAgent(closing);
   let saved = false;
   const savePromise = saveTranscriptToBackend().then(function() { saved = true; });
@@ -520,7 +584,13 @@ function moveToNextTopic(bridge) {
   const nextTopic = TOPICS[state.currentTopicIdx];
   const spoken = (bridge ? bridge + ' ' : '') + nextTopic.opener;
   pushAgent(spoken);
-  speak(spoken, function() { startListening(); });
+  // The opener's audio is normally already cached, so only the short bridge needs generating
+  speak(bridge ? [bridge, nextTopic.opener] : [nextTopic.opener],
+        function() { startListening(); },
+        { prefetch: nextAfter(state.currentTopicIdx) });
+}
+function nextAfter(idx) {
+  return (idx + 1 < TOPICS.length) ? TOPICS[idx + 1].opener : CLOSING_TEXT;
 }
 
 async function saveTranscriptToBackend() {
@@ -550,6 +620,15 @@ async function saveTranscriptToBackend() {
   }
 }
 
+// Catch-all: if the call is running but nothing is speaking, thinking or listening
+// (mic ended silently, an error swallowed a callback…), start listening again.
+function checkStall() {
+  if (!state.started || state.callOver) return;
+  if (state.isSpeaking || state.processingAnswer || state.isListening || state.wantListening) return;
+  dbg('stall detected — restarting mic');
+  startListening();
+}
+
 function startListening() {
   if (state.callOver) return;
   if (!state.recognition) {
@@ -560,6 +639,7 @@ function startListening() {
   state.finalTranscript = '';
   state.wantListening = true;
   state.isListening = true;
+  dbg('mic on');
   textInput.disabled = false; sendTextBtn.disabled = false;
   try {
     state.recognition.start();
@@ -592,6 +672,11 @@ async function captureAnswer(text) {
   state.finalTranscript = '';
   try {
     await captureAnswerInner(text);
+  } catch (err) {
+    console.error('captureAnswer error', err);
+    dbg('ERROR in answer handling: ' + (err && err.message));
+    showWarn('Something went wrong handling that answer — please say it again.');
+    if (!state.callOver) startListening();
   } finally {
     state.processingAnswer = false;
   }
@@ -623,22 +708,32 @@ function setupRecognition() {
   rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
   rec.onresult = function(ev) {
     if (!state.isListening) return; // ignore late results after stop() / while agent is talking
+    let interim = '';
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const t = ev.results[i][0].transcript;
       if (ev.results[i].isFinal) state.finalTranscript += t + ' ';
+      else interim += t;
     }
+    state.interimTranscript = interim;
+    // Chrome can take 1-2s to mark speech "final" after you stop talking. Waiting for that
+    // was the main source of lag, so treat a pause in *any* results (interim included) as
+    // the end of the answer.
     if (state.silenceTimer) clearTimeout(state.silenceTimer);
     state.silenceTimer = setTimeout(function() {
       state.silenceTimer = null;
-      if (state.isListening && state.finalTranscript.trim()) {
-        const answer = state.finalTranscript;
+      if (!state.isListening) return;
+      const answer = (state.finalTranscript + ' ' + (state.interimTranscript || '')).trim();
+      if (answer) {
         state.finalTranscript = '';
+        state.interimTranscript = '';
         stopListening();
+        dbg('answer captured: ' + answer.slice(0, 60));
         captureAnswer(answer);
       }
-    }, 800);
+    }, SILENCE_MS);
   };
   rec.onerror = function(ev) {
+    dbg('mic error: ' + ev.error);
     if (ev.error === 'not-allowed') {
       showWarn('Microphone permission denied. Allow mic access or use the text input.');
       setStatus('Mic blocked — use text input.', null);
@@ -727,13 +822,15 @@ function startCall() {
   state.deepProbeUsedOnTopic = false;
   const opener = "Hi " + state.clientName.split(' ')[0] + ", thanks for taking the time today. This is a quick fifteen-minute call to get a high-level picture of your business — I'll ask a few broad questions across six areas, with no recommendations from me on the call and no pressure to take a paid roadmap afterwards. Let's just have a useful conversation. " + TOPICS[0].opener;
   pushAgent(opener);
-  speak(opener, function() { startListening(); });
+  speak(opener, function() { startListening(); }, { prefetch: nextAfter(0) });
+  state.stallInterval = setInterval(checkStall, 2500);
 }
 
 async function endCallEarly() {
   state.callOver = true;
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
+  if (state.stallInterval) { clearInterval(state.stallInterval); state.stallInterval = null; }
   stopAllSpeech();
   const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll be in touch about the £350 roadmap. No obligation either way.";
   pushAgent(closing);
@@ -771,6 +868,8 @@ function exportTranscript() {
 function resetAll() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
+  if (state.stallInterval) clearInterval(state.stallInterval);
+  audioCache.clear();
   stopAllSpeech();
   state = {
     started: false, callOver: false, currentTopicIdx: 0, exchangesOnTopic: 0,
