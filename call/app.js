@@ -84,19 +84,39 @@ const TOPICS = [
 // Debug log: always goes to the console; add ?debug to the page URL to also show it on-page
 const DEBUG = /[?&]debug/.test(window.location.search);
 let dbgEl = null;
+const dbgLines = [];
+// With ?debug the log panel is pinned to the bottom of the screen from page load,
+// so it is always visible while a call is running.
+function ensureDebugPanel() {
+  if (!DEBUG || dbgEl) return;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#0f172a;color:#cbd5e1;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.4);font:11px/1.5 monospace';
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid #334155';
+  bar.innerHTML = '<strong style="flex:1">Call debug log</strong>';
+  const copy = document.createElement('button');
+  copy.textContent = 'Copy log';
+  copy.style.cssText = 'font:inherit;padding:2px 8px;border-radius:4px;border:1px solid #475569;background:#1e293b;color:inherit;cursor:pointer';
+  copy.onclick = function() {
+    try { navigator.clipboard.writeText(dbgLines.join('\n')); copy.textContent = 'Copied'; setTimeout(function() { copy.textContent = 'Copy log'; }, 1500); } catch (e) {}
+  };
+  bar.appendChild(copy);
+  dbgEl = document.createElement('pre');
+  dbgEl.style.cssText = 'margin:0;padding:8px 10px;max-height:30vh;overflow:auto;white-space:pre-wrap';
+  wrap.appendChild(bar); wrap.appendChild(dbgEl);
+  document.body.appendChild(wrap);
+}
 function dbg(msg) {
   const t0 = (typeof state !== 'undefined' && state.startTime) ? state.startTime : Date.now();
   const line = ((Date.now() - t0) / 1000).toFixed(1) + 's  ' + msg;
   try { console.log('[call] ' + line); } catch (e) {}
   if (!DEBUG) return;
-  if (!dbgEl) {
-    dbgEl = document.createElement('pre');
-    dbgEl.style.cssText = 'margin:16px;padding:12px;background:#0f172a;color:#cbd5e1;font:11px/1.5 monospace;max-height:260px;overflow:auto;border-radius:8px;white-space:pre-wrap';
-    document.body.appendChild(dbgEl);
-  }
+  ensureDebugPanel();
+  dbgLines.push(line);
   dbgEl.textContent += line + '\n';
   dbgEl.scrollTop = dbgEl.scrollHeight;
 }
+if (DEBUG) { ensureDebugPanel(); dbg('debug panel ready'); }
 
 // How long after the last speech result we treat the answer as finished
 const SILENCE_MS = 1200;
@@ -727,7 +747,7 @@ function setupRecognition() {
         state.finalTranscript = '';
         state.interimTranscript = '';
         stopListening();
-        dbg('answer captured: ' + answer.slice(0, 60));
+        dbg('answer captured (' + answer.length + ' chars): ' + answer.slice(0, 400));
         captureAnswer(answer);
       }
     }, SILENCE_MS);
@@ -747,10 +767,11 @@ function setupRecognition() {
   // Chrome ends recognition after a stretch of silence. If we still want to listen,
   // restart it, otherwise the call would sit on "Listening…" forever.
   rec.onend = function() {
+    dbg('mic ended' + (state.wantListening && !state.callOver ? ' (restarting)' : ''));
     if (state.wantListening && !state.callOver) {
       setTimeout(function() {
         if (state.wantListening && !state.callOver) {
-          try { rec.start(); } catch (e) {}
+          try { rec.start(); dbg('mic restarted'); } catch (e) { dbg('mic restart failed: ' + (e && e.name)); }
         }
       }, 300);
     } else {
