@@ -480,7 +480,7 @@ async function generateNextQuestion() {
       throw new Error('Backend ' + response.status + (/credit|billing|balance/i.test(detail) ? ' (Anthropic credit?)' : ''));
     }
     const decision = await response.json();
-    dbg('LLM ' + (Date.now() - llmStart) + 'ms -> ' + decision.action);
+    dbg('LLM ' + (Date.now() - llmStart) + 'ms -> ' + decision.action + (decision._model ? ' [' + decision._model + ', cache-read ' + decision._cache_read + ' tok]' : ''));
 
     // Track signal state returned by agent
     if (decision.signal_detected === true) {
