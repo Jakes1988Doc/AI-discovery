@@ -76,7 +76,7 @@ RULES FOR ENGAGEMENT:
 - Never use: "Great!", "Wonderful!", "Fantastic!", "That's really interesting" — sycophantic filler
 - Never hint at solutions: "that's exactly the kind of thing that AI could..." is strictly forbidden
 - For NO SIGNAL answers (standard tools, no friction), keep it brief: "Makes sense." or "Got it." — don't over-engage with boring answers
-- When moving between topics, use a light bridge: "Let me ask you about..." or "On a related note..." — makes transitions feel intentional rather than abrupt
+- When moving between topics, give only a brief acknowledgement — the system adds the next topic's opening question itself, so never introduce the next topic yourself
 - Never skip the engagement entirely when moving between topics — even a brief "Makes sense." before the next opener is better than nothing
 
 SIGNAL DETECTION — classify every answer as one of three levels:
@@ -121,16 +121,18 @@ Bad: "Interesting — why do you think that is?"
 ADMIN AND DOCUMENTS — owners often don't flag this as a problem because it feels normal:
 Listen specifically for: meeting notes written up after calls, reports built by copy-pasting, documents requiring the same information entered multiple times, approval chains over email or WhatsApp, filing done by hand. If you hear any of these, classify as at least STANDARD SIGNAL.
 
-Respond in JSON only — no markdown, no text outside the JSON:
+Respond in JSON only — no markdown, no text outside the JSON. Keep "action" FIRST:
 {
-  "next_question": "engagement + next question as one natural spoken response — warm, specific, human",
   "action": "followup" | "next_topic" | "wrap_up",
   "signal_detected": true | false,
   "signal_strength": "none" | "standard" | "strong",
   "is_deep_probe": true | false,
-  "signal_reason": "one phrase describing what triggered the signal, or null",
-  "reasoning": "one sentence on why you chose this action"
-}`;
+  "next_question": "see below"
+}
+
+next_question depends on action:
+- followup: engagement + the probe question as one natural spoken response (engagement 1-2 sentences max, then the question).
+- next_topic or wrap_up: ONLY a brief spoken acknowledgement of what they just said (one short sentence, e.g. "Makes sense." or a sharper reflection of the implication). Do NOT ask any question and do NOT introduce the next topic — the system appends the next topic's opening question itself.`;
 
 
 const INTERNAL_NOTES_PROMPT = `You are summarising a business discovery interview for an internal consultant who will use these notes to write a bespoke AI automation roadmap. Be specific — pull out numbers, tool names, frequencies, time-costs, exact phrasing.
@@ -171,7 +173,8 @@ app.post('/api/next-question', async (req, res) => {
     topicProbeQuestion = '', topicDeepProbeQuestion = '',
     topicMoveOnCriteria = '', signalDetected = false,
     signalStrength = 'none', deepProbeAvailable = true,
-    deepProbeUsedOnTopic = false, topicAllowsDeepProbe = false
+    deepProbeUsedOnTopic = false, topicAllowsDeepProbe = false,
+    topicAllowsProbe = true
   } = req.body || {};
 
   const probeHint = topicProbeQuestion
@@ -189,6 +192,8 @@ app.post('/api/next-question', async (req, res) => {
   let pacingInstruction;
   if (isLastTopic) {
     pacingInstruction = 'MAGIC WAND topic. Listen to their answer. Set action to "wrap_up". Zero probes — this is the closing.';
+  } else if (topicAllowsProbe === false) {
+    pacingInstruction = 'This topic allows NO probe. Whatever they said, set action to "next_topic" now, with a brief acknowledgement.';
   } else if (exchangesOnTopic === 0) {
     pacingInstruction = 'OPENER exchange. Classify their answer as NO SIGNAL / STANDARD SIGNAL / STRONG SIGNAL. If NO SIGNAL → next_topic. If STANDARD or STRONG → followup with probe question. Set signal_detected and signal_strength accordingly.';
   } else if (exchangesOnTopic === 1 && !signalDetected) {
@@ -222,9 +227,10 @@ Respond with JSON only.`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 400,
-        system: INTERVIEWER_PROMPT,
+        model: process.env.NEXT_Q_MODEL || 'claude-sonnet-4-5-20250929',
+        max_tokens: 220,
+        // Cached system prompt = faster time-to-first-token on every turn after the first
+        system: [{ type: 'text', text: INTERVIEWER_PROMPT, cache_control: { type: 'ephemeral' } }],
         messages: apiMessages
       })
     });
@@ -242,7 +248,7 @@ Respond with JSON only.`;
     } catch (e) {
       parsed = { next_question: 'Can you tell me more about that?', action: 'followup' };
     }
-    res.json(parsed);
+    res.json({ ...parsed, v: 2 });
   } catch (err) {
     console.error('next-question error', err);
     res.status(500).json({ error: 'Server error' });
@@ -514,20 +520,27 @@ app.get('/api/speak-test', async (req, res) => {
 //  POST /api/speak  — ElevenLabs TTS proxy
 //  Keeps ELEVENLABS_API_KEY server-side, never exposed to browser
 // ============================================================
-app.post('/api/speak', async (req, res) => {
-  const { text } = req.body || {};
-  if (!text) return res.status(400).json({ error: 'No text provided' });
+const speakHandler = async (req, res) => {
+  const text = (req.method === 'GET' ? req.query.text : (req.body || {}).text);
+  if (!text || typeof text !== 'string') return res.status(400).json({ error: 'No text provided' });
+  if (text.length > 2000) return res.status(400).json({ error: 'Text too long' });
 
   const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
   const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'hpp4J3VqNfWAUOO0d1Us';
+  // eleven_flash_v2_5 is ElevenLabs' lowest-latency model; set ELEVENLABS_MODEL=eleven_turbo_v2 to revert
+  const MODEL_ID = process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5';
 
   if (!ELEVENLABS_API_KEY) {
     return res.status(503).json({ error: 'ElevenLabs not configured', fallback: true });
   }
 
+  const upstream = new AbortController();
+  res.on('close', () => upstream.abort()); // client stopped listening -> stop generating
+
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream`, {
       method: 'POST',
+      signal: upstream.signal,
       headers: {
         'xi-api-key': ELEVENLABS_API_KEY,
         'Content-Type': 'application/json',
@@ -535,7 +548,7 @@ app.post('/api/speak', async (req, res) => {
       },
       body: JSON.stringify({
         text: text,
-        model_id: 'eleven_turbo_v2',
+        model_id: MODEL_ID,
         voice_settings: {
           stability: 0.45,
           similarity_boost: 0.85,
@@ -548,30 +561,25 @@ app.post('/api/speak', async (req, res) => {
     if (!r.ok) {
       const err = await r.text();
       console.error('ElevenLabs error', r.status, err);
-      return res.status(500).json({
-        error: 'ElevenLabs API error',
-        detail: err,
-        fallback: true
-      });
+      return res.status(500).json({ error: 'ElevenLabs API error', detail: err, fallback: true });
     }
 
-    // Stream audio directly back to browser
     res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Transfer-Encoding', 'chunked');
-    const reader = r.body.getReader();
-    const pump = async () => {
-      const { done, value } = await reader.read();
-      if (done) { res.end(); return; }
-      res.write(Buffer.from(value));
-      await pump();
-    };
-    await pump();
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Accel-Buffering', 'no');
+    // Stream chunks straight through so the browser can start playing immediately
+    const { Readable } = require('stream');
+    Readable.fromWeb(r.body).on('error', () => res.end()).pipe(res);
 
   } catch (err) {
+    if (err.name === 'AbortError') return;
     console.error('/api/speak error', err);
-    res.status(500).json({ error: 'Server error', detail: err.message, fallback: true });
+    if (!res.headersSent) res.status(500).json({ error: 'Server error', detail: err.message, fallback: true });
+    else res.end();
   }
-});
+};
+app.post('/api/speak', speakHandler);
+app.get('/api/speak', speakHandler);
 
 // ============================================================
 //  POST /api/save-transcript
@@ -646,6 +654,90 @@ app.post('/api/save-transcript', async (req, res) => {
   }
 
   res.json({ ok: sheetSaved || clientEmailed, sheetSaved, clientEmailed, internalEmailed, summaryError });
+});
+
+// ============================================================
+//  POST /api/contact  — contact form submissions
+// ============================================================
+app.post('/api/contact', async (req, res) => {
+  const { name = '', business = '', email = '', message = '' } = req.body || {};
+
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'name, email and message are required' });
+  }
+
+  // Always notify us via BCC_EMAIL
+  if (RESEND_API_KEY && BCC_EMAIL) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: [BCC_EMAIL],
+          subject: `New contact form message from ${name}${business ? ' · ' + business : ''}`,
+          html: `
+            <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color: #374151; line-height: 1.6;">
+              <h2 style="color: #1a2332; margin-bottom: 16px;">Contact form message</h2>
+              <p><strong>Name:</strong> ${name}</p>
+              ${business ? `<p><strong>Business:</strong> ${business}</p>` : ''}
+              <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+              <div style="background: #f9f9f6; border: 1px solid #e8e8e0; border-radius: 10px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 0; white-space: pre-wrap;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              </div>
+              <p style="font-size: 12px; color: #94a3b8;">Sent via aigrowthcatalyst.org/contact.html</p>
+            </div>
+          `
+        })
+      });
+    } catch (err) {
+      console.error('contact notification email error', err);
+    }
+  }
+
+  // Send acknowledgement to the person who filled in the form
+  if (RESEND_API_KEY && email) {
+    const firstName = name.split(' ')[0] || 'there';
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: FROM_EMAIL,
+          to: [email],
+          subject: 'Thanks for getting in touch',
+          html: `
+            <div style="font-family: -apple-system, sans-serif; max-width: 560px; margin: 0 auto; color: #374151; line-height: 1.6;">
+              <h2 style="color: #1a2332; margin-bottom: 16px;">Hi ${firstName},</h2>
+              <p style="font-size: 15px; margin-bottom: 16px;">
+                Thanks for reaching out. We've received your message and will get back to you within one business day.
+              </p>
+              <p style="font-size: 15px; margin-bottom: 16px;">
+                In the meantime, if you're curious whether AI could help your business, the free 15-minute discovery call is the fastest way to find out — no pitch, no obligation.
+              </p>
+              <p style="margin: 24px 0;">
+                <a href="https://aigrowthcatalyst.org/call/" style="background: #0f172a; color: #fafaf7; padding: 12px 24px; border-radius: 100px; text-decoration: none; font-size: 14px; font-weight: 500;">Book the free discovery call</a>
+              </p>
+              <p style="font-size: 15px; margin-top: 24px;">
+                Speak soon,<br/>
+                <strong>The AI Growth Catalyst team</strong>
+              </p>
+            </div>
+          `
+        })
+      });
+    } catch (err) {
+      console.error('contact ack email error', err);
+    }
+  }
+
+  res.json({ ok: true });
 });
 
 app.listen(PORT, () => {
