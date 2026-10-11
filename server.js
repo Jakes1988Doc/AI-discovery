@@ -227,7 +227,8 @@ Respond with JSON only.`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: process.env.NEXT_Q_MODEL || 'claude-sonnet-4-5-20250929',
+        // Haiku 4.5 is ~2-3x faster than Sonnet for this short JSON task; set NEXT_Q_MODEL=claude-sonnet-4-5-20250929 to revert
+        model: process.env.NEXT_Q_MODEL || 'claude-haiku-4-5-20251001',
         max_tokens: 220,
         // Cached system prompt = faster time-to-first-token on every turn after the first
         system: [{ type: 'text', text: INTERVIEWER_PROMPT, cache_control: { type: 'ephemeral' } }],
@@ -237,7 +238,7 @@ Respond with JSON only.`;
     if (!r.ok) {
       const errText = await r.text();
       console.error('Anthropic error', r.status, errText);
-      return res.status(500).json({ error: 'Anthropic API error', detail: r.status });
+      return res.status(500).json({ error: 'Anthropic API error', status: r.status, detail: String(errText).slice(0, 300) });
     }
     const data = await r.json();
     const text = data.content.filter(c => c.type === 'text').map(c => c.text).join('').trim();
