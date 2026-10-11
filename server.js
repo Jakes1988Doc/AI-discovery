@@ -249,7 +249,7 @@ Respond with JSON only.`;
     } catch (e) {
       parsed = { next_question: 'Can you tell me more about that?', action: 'followup' };
     }
-    res.json({ ...parsed, v: 2 });
+    res.json({ ...parsed, v: 2, _model: data.model, _cache_read: (data.usage && data.usage.cache_read_input_tokens) || 0 });
   } catch (err) {
     console.error('next-question error', err);
     res.status(500).json({ error: 'Server error' });
