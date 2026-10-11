@@ -19,6 +19,7 @@
 // ============================================================
 
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const { google } = require('googleapis');
 const {
@@ -28,6 +29,7 @@ const {
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: false }));
 
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
 app.use(cors({ origin: allowedOrigin === '*' ? true : allowedOrigin }));
@@ -1009,6 +1011,70 @@ const speakHandler = async (req, res) => {
 app.post('/api/speak', speakHandler);
 app.get('/api/speak', speakHandler);
 
+
+// ============================================================
+//  On-demand roadmap — a signed link in the internal email lets you generate a draft for ANY saved call
+//  (e.g. when the notes said NO but you disagree). Needs ADMIN_KEY set on Render.
+// ============================================================
+const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://ai-discovery-tx39.onrender.com').replace(/\/$/, '');
+function signRow(row) {
+  return crypto.createHmac('sha256', process.env.ADMIN_KEY || '').update('roadmap:' + row).digest('hex');
+}
+function validSig(row, sig) {
+  if (!process.env.ADMIN_KEY || !sig) return false;
+  const a = Buffer.from(signRow(row)), b = Buffer.from(String(sig));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function roadmapLinkHtml(row) {
+  if (!row || !process.env.ADMIN_KEY) return '';
+  const url = PUBLIC_URL + '/admin/roadmap?row=' + row + '&sig=' + signRow(row);
+  return '<p style="margin-top:12px"><a href="' + url + '">Generate a draft roadmap for this call</a> (opens a confirm page; the draft arrives by email about a minute later).</p>';
+}
+function parseTranscriptText(text) {
+  return String(text || '').split(/\n\n(?=\[)/).map(function(block) {
+    const m = block.match(/^\[(.*?)\] (AGENT|CLIENT)(?: \((.*?)\))?: ([\s\S]*)$/);
+    return m ? { role: m[2] === 'AGENT' ? 'agent' : 'user', time: m[1], topic: m[3] || '', text: m[4] } : null;
+  }).filter(Boolean);
+}
+function adminPage(title, bodyHtml) {
+  return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escHtml(title) + '</title>' +
+    '<body style="font-family:-apple-system,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;color:#1a2332;line-height:1.6">' + bodyHtml + '</body>';
+}
+app.get('/admin/roadmap', function(req, res) {
+  const row = parseInt(req.query.row, 10);
+  if (!row || row < 2 || !validSig(row, req.query.sig)) return res.status(403).send(adminPage('Not allowed', '<h2>Link not valid</h2><p>This link is invalid, or ADMIN_KEY is not set on the server.</p>'));
+  res.send(adminPage('Generate roadmap', '<h2>Generate a draft roadmap?</h2><p>This reads call row ' + row + ' from your sheet, rebuilds the notes and writes a draft roadmap. It costs a few pence in AI usage and is emailed to you. Nothing is sent to the client.</p>' +
+    '<form method="POST" action="/admin/roadmap"><input type="hidden" name="row" value="' + row + '"><input type="hidden" name="sig" value="' + escHtml(req.query.sig) + '">' +
+    '<button style="font:inherit;padding:10px 18px;border:0;border-radius:8px;background:#c85a3e;color:#fff;cursor:pointer">Generate draft roadmap</button></form>'));
+});
+app.post('/admin/roadmap', async function(req, res) {
+  const row = parseInt(req.body.row, 10);
+  if (!row || row < 2 || !validSig(row, req.body.sig)) return res.status(403).send(adminPage('Not allowed', '<h2>Link not valid</h2>'));
+  if (!(SHEET_ID && SVC_JSON)) return res.status(500).send(adminPage('Not available', '<h2>Google Sheet is not configured on the server</h2>'));
+  let r;
+  try {
+    const auth = new google.auth.GoogleAuth({ credentials: JSON.parse(SVC_JSON), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const got = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Sheet1!A' + row + ':H' + row });
+    r = (got.data.values || [])[0];
+  } catch (err) {
+    console.error('Admin roadmap sheet read failed', err.message);
+    return res.status(500).send(adminPage('Error', '<h2>Could not read the sheet</h2><p>' + escHtml(err.message) + '</p>'));
+  }
+  if (!r || !r[6]) return res.status(404).send(adminPage('Not found', '<h2>No call found in row ' + row + '</h2>'));
+  const meta = { clientName: r[1] || '', businessName: r[2] || '', email: r[3] || '',
+    dateStr: new Date(r[0] || Date.now()).toLocaleString('en-GB', { dateStyle: 'long' }) };
+  const transcript = parseTranscriptText(r[6]);
+  if (transcript.length < 2) return res.status(422).send(adminPage('Too short', '<h2>That call has too little transcript to build a roadmap from</h2>'));
+  res.send(adminPage('Queued', '<h2>Roadmap queued</h2><p>Drafting a roadmap for <strong>' + escHtml(meta.businessName) + '</strong>. It will arrive in your inbox in about a minute, or you will get a "[Roadmap draft FAILED]" email with the reason.</p>'));
+  generateInternalNotes(transcript, meta.clientName, meta.businessName)
+    .then(function(notes) { return runRoadmapJob(notes, transcript, meta); })
+    .catch(function(err) {
+      console.error('Admin roadmap notes failed', err);
+      return runRoadmapJob({ note: 'notes step failed: ' + err.message }, transcript, meta);
+    });
+});
+
 // ============================================================
 //  POST /api/save-transcript
 // ============================================================
@@ -1026,6 +1092,7 @@ app.post('/api/save-transcript', async (req, res) => {
   }).join('\n\n');
 
   let sheetSaved = false;
+  let sheetRow = null;
   if (SHEET_ID && SVC_JSON) {
     try {
       const credentials = JSON.parse(SVC_JSON);
@@ -1043,12 +1110,16 @@ app.post('/api/save-transcript', async (req, res) => {
         transcriptText,
         'NEW — quote pending review'
       ];
-      await sheets.spreadsheets.values.append({
+      const appendRes = await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID, range: 'Sheet1!A1',
         valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
         requestBody: { values: [row] }
       });
       sheetSaved = true;
+      try {
+        const m = String((appendRes.data.updates || {}).updatedRange || '').match(/!A(\d+)/);
+        if (m) sheetRow = parseInt(m[1], 10);
+      } catch (e) {}
     } catch (err) {
       console.error('Sheet save error', err.message);
     }
@@ -1108,6 +1179,7 @@ app.post('/api/save-transcript', async (req, res) => {
       } else {
         afterHtml = '<hr/><p><em>No client recap drafted — fit was weak or the AI had too little to go on. The client received the generic acknowledgement.</em></p>';
       }
+      if (!roadmapJob) afterHtml += roadmapLinkHtml(sheetRow);
       const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.shouldOfferRoadmap, { afterHtml });
       internalEmailed = !internalResult.skipped;
       if (internalResult.skipped) summaryError = (summaryError ? summaryError + ' | ' : '') + 'Internal email skipped: RESEND_API_KEY or BCC_EMAIL not set on the server';
