@@ -138,6 +138,7 @@ let state = {
   isSpeaking: false,
   finalTranscript: '',
   silenceTimer: null,
+  liveText: '', carryText: '', turnId: 0, turnInFlight: false, submittedText: '', snap: null,
   clientName: '',
   businessName: '',
   email: '',
@@ -283,7 +284,7 @@ function stopAllSpeech() {
 // heard, false if it never started (so the caller can use the browser voice instead).
 // It always resolves: ended, error, a start-up watchdog, and a duration-based safety
 // timer all guarantee the call can never hang waiting for playback to finish.
-function playBuffer(arrayBuffer, stale) {
+function playBuffer(arrayBuffer, stale, onPlay) {
   return new Promise(function(resolve) {
     const audio = player;
     const url = URL.createObjectURL(new Blob([arrayBuffer], { type: 'audio/mpeg' }));
@@ -318,6 +319,7 @@ function playBuffer(arrayBuffer, stale) {
       dbg('audio playing');
       clearTimeout(startWatchdog);
       if (!stale()) setStatus('Agent speaking…', 'speaking');
+      if (onPlay && !stale()) onPlay();
     };
     audio.onloadedmetadata = function() {
       const d = audio.duration;
@@ -393,8 +395,19 @@ async function speak(input, onDone, opts) {
   setStatus('Connecting…', 'thinking');
   dbg('speak: ' + parts.join(' | ').slice(0, 70) + '…');
 
+  // onStart fires once, when the agent's voice actually begins. That is the moment the
+  // user's turn is committed and the mic is switched off (until then the user can still
+  // carry on talking and cancel the reply).
+  let startedOnce = false;
+  const markStart = function() {
+    if (startedOnce) return;
+    startedOnce = true;
+    if (opts && opts.onStart) opts.onStart();
+  };
+
   const finish = function() {
     if (stale()) return;
+    markStart();
     state.isSpeaking = false;
     if (!isFinal) setStatus('Listening…', 'listening');
     dbg('speak done');
@@ -408,11 +421,12 @@ async function speak(input, onDone, opts) {
     if (i === 0 && opts && opts.prefetch) prefetchAudio(opts.prefetch);
     let heard = false;
     if (buf) {
-      heard = await playBuffer(buf, stale);
+      heard = await playBuffer(buf, stale, markStart);
       if (stale()) return;
     }
     if (!heard) {
       dbg('using browser voice');
+      markStart();
       setStatus('Agent speaking…', 'speaking');
       await speakFallback(parts[i]);
       if (stale()) return;
@@ -437,7 +451,7 @@ function pushUser(text) {
   renderTranscript();
 }
 
-async function generateNextQuestion() {
+async function generateNextQuestion(turn) {
   setStatus('Agent thinking…', 'thinking');
   const currentTopic = TOPICS[state.currentTopicIdx];
   const isLastTopic = state.currentTopicIdx >= TOPICS.length - 1;
@@ -482,6 +496,7 @@ async function generateNextQuestion() {
       throw new Error('Backend ' + response.status + (/credit|billing|balance/i.test(detail) ? ' (Anthropic credit?)' : ''));
     }
     const decision = await response.json();
+    if (turn !== state.turnId) { dbg('LLM reply discarded (turn cancelled)'); return { stale: true }; }
     dbg('LLM ' + (Date.now() - llmStart) + 'ms -> ' + decision.action + (decision._model ? ' [' + decision._model + ', cache-read ' + decision._cache_read + ' tok]' : ''));
 
     // Track signal state returned by agent
@@ -497,6 +512,7 @@ async function generateNextQuestion() {
     return decision;
   } catch (err) {
     clearTimeout(timeoutId);
+    if (turn !== state.turnId) return { stale: true };
     console.error('Backend error', err);
     showWarn('The AI backend returned an error (' + (err && err.message ? err.message : 'unreachable') + '). Moving to the next topic.');
     const nextIdx = state.currentTopicIdx + 1;
@@ -518,19 +534,23 @@ function bridgeFrom(decision) {
   return '';
 }
 
-async function handleAnswerAndContinue() {
+async function handleAnswerAndContinue(turn) {
   const currentTopic = TOPICS[state.currentTopicIdx];
 
   // Last topic (magic wand): no probing and no need to wait for the AI —
   // close the call straight away so it always finishes cleanly.
   if (state.currentTopicIdx >= TOPICS.length - 1) {
+    // Short grace period so a final answer that trails off isn't cut short
+    await new Promise(function(resolve) { setTimeout(resolve, FINAL_GRACE_MS); });
+    if (turn !== state.turnId) return; // user kept talking — turn was cancelled
+    commitTurn(turn);
     finishCall(CLOSING_TEXT);
     return;
   }
 
   // Hard guard: no-probe topics move on immediately after opener
   if (!currentTopic.allowProbe && state.exchangesOnTopic >= 1) {
-    moveToNextTopic();
+    moveToNextTopic(undefined, turn);
     return;
   }
 
@@ -541,28 +561,29 @@ async function handleAnswerAndContinue() {
 
   // If we've already done a standard probe AND no deep probe is eligible, move on
   if (state.exchangesOnTopic >= 2 && !deepProbeEligible) {
-    moveToNextTopic();
+    moveToNextTopic(undefined, turn);
     return;
   }
 
   // If we've done a standard probe AND a deep probe, always move on
   if (state.exchangesOnTopic >= 3) {
-    moveToNextTopic();
+    moveToNextTopic(undefined, turn);
     return;
   }
 
-  const decision = await generateNextQuestion();
+  const decision = await generateNextQuestion(turn);
+  if (decision.stale || turn !== state.turnId) return;
   clearWarn();
 
   // wrap_up before the final topic is treated as next_topic so the call can't end early
   if (decision.action === 'next_topic' || decision.action === 'wrap_up') {
-    moveToNextTopic(bridgeFrom(decision));
+    moveToNextTopic(bridgeFrom(decision), turn);
     return;
   }
 
   // followup — if the model gave us nothing to say, move on rather than going silent
   if (!decision.next_question || !String(decision.next_question).trim()) {
-    moveToNextTopic();
+    moveToNextTopic(undefined, turn);
     return;
   }
   state.exchangesOnTopic++;
@@ -572,7 +593,8 @@ async function handleAnswerAndContinue() {
   }
 
   pushAgent(decision.next_question);
-  speak(decision.next_question, function() { startListening(); });
+  speak(decision.next_question, function() { startListening(); },
+        { onStart: function() { commitTurn(turn); } });
 }
 
 // Close the call: speak the goodbye, save the transcript, tidy up. Always reached
@@ -592,9 +614,10 @@ async function finishCall(closing) {
   stopBtn.disabled = true;
 }
 
-function moveToNextTopic(bridge) {
+function moveToNextTopic(bridge, turn) {
   const nextIdx = state.currentTopicIdx + 1;
   if (nextIdx >= TOPICS.length) {
+    commitTurn(turn);
     finishCall(CLOSING_TEXT);
     return;
   }
@@ -609,7 +632,7 @@ function moveToNextTopic(bridge) {
   // The opener's audio is normally already cached, so only the short bridge needs generating
   speak(bridge ? [bridge, nextTopic.opener] : [nextTopic.opener],
         function() { startListening(); },
-        { prefetch: nextAfter(state.currentTopicIdx) });
+        { prefetch: nextAfter(state.currentTopicIdx), onStart: function() { commitTurn(turn); } });
 }
 function nextAfter(idx) {
   return (idx + 1 < TOPICS.length) ? TOPICS[idx + 1].opener : CLOSING_TEXT;
@@ -665,6 +688,9 @@ function startListening() {
     return;
   }
   state.finalTranscript = '';
+  state.liveText = '';
+  state.carryText = '';
+  state.turnInFlight = false;
   state.wantListening = true;
   state.isListening = true;
   dbg('mic on');
@@ -689,27 +715,102 @@ function stopListening() {
   }
   if (state.silenceTimer) { clearTimeout(state.silenceTimer); state.silenceTimer = null; }
 }
-async function captureAnswer(text) {
+// ---- Turn handling -------------------------------------------------------
+// A "turn" = one user answer + the agent's reply. The answer is submitted after a short
+// silence, but the mic stays open until the agent's voice actually starts. If the user
+// carries on talking in that window, the turn is cancelled (state rolled back) and the
+// extra words are joined onto the answer, so a mid-sentence pause no longer cuts you off.
+const FINAL_GRACE_MS = 1500;
+const CONTINUATION_CUE = /\b(and|but|so|because|or|then|like|kind of|sort of|i mean|um|uh|er|the|a|an|to|of|with|for|that|which|is|are|was|we|i|it|if|when|as|my|our|their|in|on|at)$/i;
+
+function silenceDelay(text) {
+  let d = SILENCE_MS;
+  if (CONTINUATION_CUE.test(text.trim())) d += 1500; // sentence clearly unfinished
+  if (text.trim().length < 15) d += 800;             // very short = probably the start of an answer
+  return d;
+}
+function armSilenceTimer() {
+  if (state.silenceTimer) clearTimeout(state.silenceTimer);
+  state.silenceTimer = setTimeout(submitTurn, silenceDelay(state.liveText || ''));
+}
+
+function submitTurn() {
+  state.silenceTimer = null;
+  if (!state.isListening || state.callOver || state.turnInFlight) return;
+  const answer = (state.liveText || '').trim();
+  if (!answer) return;
+  state.snap = {
+    topicIdx: state.currentTopicIdx, exchanges: state.exchangesOnTopic,
+    signalDetected: state.signalDetectedOnCurrentTopic, signalStrength: state.signalStrengthOnCurrentTopic,
+    deepAvail: state.deepProbeAvailable, deepUsed: state.deepProbeUsedOnTopic,
+    questions: state.questionsAsked, covered: new Set(state.topicsCovered),
+    transcriptLen: state.transcript.length, currentQ: currentQEl.textContent
+  };
+  state.turnId++;
+  state.turnInFlight = true;
+  state.submittedText = answer;
+  dbg('answer submitted (' + answer.length + ' chars): ' + answer.slice(0, 400));
+  captureAnswer(answer, state.turnId);
+}
+
+function revokeTurn() {
+  dbg('still talking — cancelling the reply, listening on');
+  state.turnId++;            // any in-flight AI reply / audio for the old turn is now ignored
+  stopAllSpeech();
+  state.isSpeaking = false;
+  const s = state.snap;
+  if (s) {
+    state.currentTopicIdx = s.topicIdx; state.exchangesOnTopic = s.exchanges;
+    state.signalDetectedOnCurrentTopic = s.signalDetected; state.signalStrengthOnCurrentTopic = s.signalStrength;
+    state.deepProbeAvailable = s.deepAvail; state.deepProbeUsedOnTopic = s.deepUsed;
+    state.questionsAsked = s.questions; state.topicsCovered = s.covered;
+    state.transcript.length = s.transcriptLen;
+    currentQEl.textContent = s.currentQ;
+    updateStats(); renderTranscript();
+  }
+  state.turnInFlight = false;
+  state.processingAnswer = false;
+  setStatus("Listening… (pause when you're done)", 'live');
+}
+
+// The agent's voice has started: the answer is final and the mic goes off.
+function commitTurn(turn) {
+  if (turn !== state.turnId || !state.turnInFlight) return;
+  state.turnInFlight = false;
+  state.processingAnswer = false;
+  dbg('turn committed — agent speaking, mic off');
+  stopListening();
+}
+
+async function captureAnswer(text, turn) {
   text = text.trim();
   if (!text) return;
-  // Re-entrancy guard: speech recognition can deliver a late final result after
-  // stop(), which re-arms the silence timer and submits the same answer twice
-  // (=> two questions generated and spoken at once).
-  if (state.processingAnswer) return;
+  if (turn === undefined) {
+    // Typed answer: nothing to cancel, so no revoke window
+    stopListening();
+    state.snap = null;
+    state.turnInFlight = false;
+    state.turnId++;
+    turn = state.turnId;
+  }
   state.processingAnswer = true;
-  state.finalTranscript = '';
   try {
-    await captureAnswerInner(text);
+    await captureAnswerInner(text, turn);
   } catch (err) {
     console.error('captureAnswer error', err);
     dbg('ERROR in answer handling: ' + (err && err.message));
     showWarn('Something went wrong handling that answer — please say it again.');
-    if (!state.callOver) startListening();
+    if (turn === state.turnId) {
+      state.turnInFlight = false;
+      state.processingAnswer = false;
+      if (!state.callOver) startListening();
+    }
   } finally {
-    state.processingAnswer = false;
+    // Voice turns stay "in flight" until the agent starts speaking (commit) or the turn is cancelled
+    if (turn === state.turnId && !state.turnInFlight) state.processingAnswer = false;
   }
 }
-async function captureAnswerInner(text) {
+async function captureAnswerInner(text, turn) {
   pushUser(text);
 
   if (state.callOver) {
@@ -723,7 +824,7 @@ async function captureAnswerInner(text) {
   }
 
   setStatus('Got it. Thinking about what to ask next…', 'thinking');
-  await handleAnswerAndContinue();
+  await handleAnswerAndContinue(turn);
 }
 
 function setupRecognition() {
@@ -736,29 +837,13 @@ function setupRecognition() {
   rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
   rec.onresult = function(ev) {
     if (!state.isListening) return; // ignore late results after stop() / while agent is talking
-    let interim = '';
-    for (let i = ev.resultIndex; i < ev.results.length; i++) {
-      const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) state.finalTranscript += t + ' ';
-      else interim += t;
-    }
-    state.interimTranscript = interim;
-    // Chrome can take 1-2s to mark speech "final" after you stop talking. Waiting for that
-    // was the main source of lag, so treat a pause in *any* results (interim included) as
-    // the end of the answer.
-    if (state.silenceTimer) clearTimeout(state.silenceTimer);
-    state.silenceTimer = setTimeout(function() {
-      state.silenceTimer = null;
-      if (!state.isListening) return;
-      const answer = (state.finalTranscript + ' ' + (state.interimTranscript || '')).trim();
-      if (answer) {
-        state.finalTranscript = '';
-        state.interimTranscript = '';
-        stopListening();
-        dbg('answer captured (' + answer.length + ' chars): ' + answer.slice(0, 400));
-        captureAnswer(answer);
-      }
-    }, SILENCE_MS);
+    // Whole transcript for this listening window (finals + the words still being recognised)
+    let text = '';
+    for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript + ' ';
+    state.liveText = ((state.carryText || '') + ' ' + text).replace(/\s+/g, ' ').trim();
+    // Still talking after the answer was sent off? Cancel that reply and keep listening.
+    if (state.turnInFlight && state.liveText.length >= (state.submittedText || '').length + 6) revokeTurn();
+    armSilenceTimer();
   };
   rec.onerror = function(ev) {
     dbg('mic error: ' + ev.error);
@@ -780,6 +865,7 @@ function setupRecognition() {
   rec.onend = function() {
     dbg('mic ended' + (state.wantListening && !state.callOver ? ' (restarting)' : ''));
     if (state.wantListening && !state.callOver) {
+      state.carryText = state.liveText || ''; // a new session starts empty; keep what was said so far
       setTimeout(function() {
         if (state.wantListening && !state.callOver) {
           try { rec.start(); dbg('mic restarted'); } catch (e) { dbg('mic restart failed: ' + (e && e.name)); }
@@ -860,6 +946,7 @@ function startCall() {
 
 async function endCallEarly() {
   state.callOver = true;
+  state.turnId++;
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
   if (state.stallInterval) { clearInterval(state.stallInterval); state.stallInterval = null; }
@@ -908,6 +995,7 @@ function resetAll() {
     questionsAsked: 0, topicsCovered: new Set(), transcript: [],
     startTime: null, timerInterval: null, recognition: state.recognition,
     isListening: false, isSpeaking: false, finalTranscript: '', silenceTimer: null,
+    liveText: '', carryText: '', turnId: (state.turnId || 0) + 1, turnInFlight: false, submittedText: '', snap: null,
     clientName: '', businessName: '', email: '',
     signalDetectedOnCurrentTopic: false, signalStrengthOnCurrentTopic: 'none',
     deepProbeAvailable: true, deepProbeUsedOnTopic: false, processingAnswer: false, wantListening: false
@@ -934,7 +1022,6 @@ resetBtn.addEventListener('click', resetAll);
 sendTextBtn.addEventListener('click', function() {
   const v = textInput.value.trim();
   if (!v) return;
-  stopListening();
   captureAnswer(v);
   textInput.value = '';
 });
