@@ -184,6 +184,11 @@ function renderTranscript() {
 //  onDone is GUARANTEED to fire via Promise regardless of path
 // ============================================================
 let currentAudio = null;
+// One persistent <audio> element, unlocked by the Start click (Safari/iOS only allow
+// later programmatic playback on an element that was started inside a user gesture).
+const player = new Audio();
+player.preload = 'auto';
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 function speakFallback(text) {
   return new Promise(function(resolve) {
@@ -198,7 +203,13 @@ function speakFallback(text) {
     if (preferred) utter.voice = preferred;
     utter.onend  = function() { resolve(); };
     utter.onerror = function() { resolve(); };
-    window.speechSynthesis.speak(utter);
+    // Chrome drops a speak() issued immediately after cancel(); give it a beat
+    const tokenAtStart = speakToken;
+    setTimeout(function() {
+      if (tokenAtStart !== speakToken) { resolve(); return; } // superseded meanwhile
+      try { window.speechSynthesis.resume(); } catch (e) {}
+      window.speechSynthesis.speak(utter);
+    }, 120);
   });
 }
 
@@ -231,7 +242,7 @@ async function speak(text, onDone, opts) {
   const isFinal = !!(opts && opts.final);
 
   state.isSpeaking = true;
-  setStatus('Agent speaking…', 'speaking');
+  setStatus('Connecting…', 'thinking');
 
   const finish = function() {
     if (stale()) return;
@@ -243,20 +254,36 @@ async function speak(text, onDone, opts) {
   // Stream the audio: the browser starts playing as soon as the first chunks
   // arrive instead of waiting for the whole mp3 to download.
   const url = BACKEND_URL.replace(/\/$/, '') + '/api/speak?text=' + encodeURIComponent(text);
-  const audio = new Audio();
-  audio.preload = 'auto';
+  const audio = player;
   currentAudio = audio;
   let started = false;
   let needFallback = false;
 
   await new Promise(function(resolve) {
     currentAudioResolve = resolve;
+    // If nothing starts playing within 8s (backend asleep / stalled), stop waiting and
+    // use the browser voice so the call never sits there in silence.
+    const watchdog = setTimeout(function() {
+      if (started || stale()) return;
+      console.warn('No audio after 8s — using browser TTS');
+      needFallback = true;
+      try {
+        audio.onended = null; audio.onerror = null; audio.onplaying = null;
+        audio.pause(); audio.removeAttribute('src'); audio.load();
+      } catch (e) {}
+      done();
+    }, 8000);
     const done = function() {
+      clearTimeout(watchdog);
       if (currentAudio === audio) currentAudio = null;
       if (currentAudioResolve === resolve) currentAudioResolve = null;
       resolve();
     };
-    audio.onplaying = function() { started = true; };
+    audio.onplaying = function() {
+      started = true;
+      clearTimeout(watchdog);
+      if (!stale()) setStatus('Agent speaking…', 'speaking');
+    };
     audio.onended = done;
     audio.onerror = function() {
       // Only fall back to browser TTS if nothing was heard yet (avoids repeating the question)
@@ -275,6 +302,7 @@ async function speak(text, onDone, opts) {
   if (stale()) return;
   if (needFallback) {
     console.warn('ElevenLabs unavailable, using browser TTS');
+    setStatus('Agent speaking…', 'speaking');
     await speakFallback(text);
   }
   finish();
@@ -608,6 +636,15 @@ function unlockAudio() {
   src.connect(ctx.destination);
   src.start(0);
   src.onended = function() { ctx.close(); };
+  // Prime the persistent <audio> element and speechSynthesis inside the gesture
+  try { player.src = SILENT_WAV; player.play().catch(function() {}); } catch (e) {}
+  try {
+    if ('speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    }
+  } catch (e) {}
 }
 
 function startCall() {
@@ -629,6 +666,7 @@ function startCall() {
 
   // Unlock audio on this user gesture before any async calls
   unlockAudio();
+  try { fetch(BACKEND_URL.replace(/\/$/, '') + '/').catch(function() {}); } catch (e) {}
 
   state.started = true;
   state.startTime = Date.now();
