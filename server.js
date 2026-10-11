@@ -344,6 +344,27 @@ const NOTES_TOOL = {
   }
 };
 
+// Some models (e.g. claude-sonnet-5-5) reject a forced tool_choice. Try forced first;
+// on that specific 400, retry with tool_choice auto and remember the model so later calls skip the failed attempt.
+const NO_FORCED_TOOL = new Set();
+async function anthropicToolCall(model, base, toolName) {
+  const send = (choice) => fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify(Object.assign({}, base, { model, tool_choice: choice }))
+  });
+  const forced = !NO_FORCED_TOOL.has(model);
+  let r = await send(forced ? { type: 'tool', name: toolName } : { type: 'auto' });
+  let text = await r.text();
+  if (!r.ok && forced && r.status === 400 && /tool_choice/i.test(text)) {
+    NO_FORCED_TOOL.add(model);
+    console.log('Model ' + model + ' does not allow forced tool use; using tool_choice auto');
+    r = await send({ type: 'auto' });
+    text = await r.text();
+  }
+  return { ok: r.ok, status: r.status, text };
+}
+
 async function generateInternalNotes(transcript, clientName, businessName) {
   const transcriptText = transcript.map(t => {
     const role = t.role === 'agent' ? 'AGENT' : 'CLIENT';
@@ -354,29 +375,18 @@ async function generateInternalNotes(transcript, clientName, businessName) {
   let lastErr = 'no model tried';
   for (const model of models) {
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 6000,
-          system: INTERNAL_NOTES_PROMPT,
-          tools: [NOTES_TOOL],
-          tool_choice: { type: 'tool', name: 'record_notes' },
-          messages: [{ role: 'user', content: `Client: ${clientName}\nBusiness: ${businessName}\n\nTRANSCRIPT:\n\n${transcriptText}\n\nCall the record_notes tool with your notes.` }]
-        })
-      });
+      const r = await anthropicToolCall(model, {
+        max_tokens: 6000,
+        system: INTERNAL_NOTES_PROMPT,
+        tools: [NOTES_TOOL],
+        messages: [{ role: 'user', content: `Client: ${clientName}\nBusiness: ${businessName}\n\nTRANSCRIPT:\n\n${transcriptText}\n\nCall the record_notes tool with your notes.` }]
+      }, 'record_notes');
       if (!r.ok) {
-        const body = await r.text();
-        lastErr = 'Notes API ' + model + ' ' + r.status + ': ' + body.slice(0, 200);
+        lastErr = 'Notes API ' + model + ' ' + r.status + ': ' + r.text.slice(0, 200);
         console.error(lastErr);
         continue;
       }
-      const data = await r.json();
+      const data = JSON.parse(r.text);
       if (data.stop_reason === 'max_tokens') console.error('Notes reply hit max_tokens on ' + model);
       const tool = (data.content || []).find(c => c.type === 'tool_use' && c.name === 'record_notes');
       if (tool && tool.input && typeof tool.input === 'object') return tool.input;
@@ -794,29 +804,22 @@ async function generateRoadmap(rawNotes, transcript, clientName, businessName) {
   let lastErr = 'no model tried';
   for (const model of models) {
     try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({
-          model,
-          max_tokens: 8000,
-          system: ROADMAP_PROMPT,
-          tools: [ROADMAP_TOOL],
-          tool_choice: { type: 'tool', name: 'record_roadmap' },
-          messages: [{ role: 'user', content:
-            'Client: ' + clientName + '\nBusiness: ' + businessName +
-            '\n\nINTERNAL DISCOVERY NOTES (structured, from the call):\n' + JSON.stringify(rawNotes, null, 1) +
-            '\n\nFULL TRANSCRIPT:\n\n' + transcriptText +
-            '\n\nCall the record_roadmap tool with the draft roadmap.' }]
-        })
-      });
+      const r = await anthropicToolCall(model, {
+        max_tokens: 8000,
+        system: ROADMAP_PROMPT,
+        tools: [ROADMAP_TOOL],
+        messages: [{ role: 'user', content:
+          'Client: ' + clientName + '\nBusiness: ' + businessName +
+          '\n\nINTERNAL DISCOVERY NOTES (structured, from the call):\n' + JSON.stringify(rawNotes, null, 1) +
+          '\n\nFULL TRANSCRIPT:\n\n' + transcriptText +
+          '\n\nCall the record_roadmap tool with the draft roadmap.' }]
+      }, 'record_roadmap');
       if (!r.ok) {
-        const body = await r.text();
-        lastErr = 'Roadmap API ' + model + ' ' + r.status + ': ' + body.slice(0, 200);
+        lastErr = 'Roadmap API ' + model + ' ' + r.status + ': ' + r.text.slice(0, 200);
         console.error(lastErr);
         continue;
       }
-      const data = await r.json();
+      const data = JSON.parse(r.text);
       if (data.stop_reason === 'max_tokens') console.error('Roadmap reply hit max_tokens on ' + model);
       const tool = (data.content || []).find(c => c.type === 'tool_use' && c.name === 'record_roadmap');
       if (tool && tool.input && typeof tool.input === 'object') return tool.input;
@@ -1324,7 +1327,12 @@ app.post('/api/save-transcript', async (req, res) => {
         const sc = normaliseNotes(notes).snapshotChecks || [];
         if (sc.length) afterHtml += '<p><strong>Check before sending:</strong></p><ul>' + sc.map(c => '<li>' + escHtml(c) + '</li>').join('') + '</ul>';
       } else {
-        afterHtml = '<hr/><p><em>No client snapshot drafted — fit was weak or the AI had too little to go on. The client received the generic acknowledgement.</em></p>';
+        const nn = normaliseNotes(notes), why = [];
+        if (nn.recapFit !== 'strong' && nn.recapFit !== 'moderate') why.push('fit rated "' + (nn.recapFit || 'not set') + '" (needs strong or moderate)');
+        if (!nn.snapshot || !nn.snapshot.executiveSummary) why.push('no snapshot summary');
+        if (!nn.snapshot || nn.snapshot.painPoints.length < 2) why.push('only ' + (nn.snapshot ? nn.snapshot.painPoints.length : 0) + ' pain point(s) (needs 2+)');
+        if (!nn.snapshot || !nn.snapshot.startingPoint.name || !nn.snapshot.startingPoint.whatChanges) why.push('starting point incomplete');
+        afterHtml = '<hr/><p><em>No client snapshot drafted, so the client received the generic acknowledgement. Reason: ' + escHtml(why.join('; ') || 'unknown') + '.</em></p>';
       }
       if (!roadmapJob) afterHtml += roadmapLinkHtml(sheetRow);
       const internalResult = await sendInternalNotes(clientName, businessName, email, docBuffer, notes.shouldOfferRoadmap, { afterHtml });
