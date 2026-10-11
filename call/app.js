@@ -197,15 +197,30 @@ function speakFallback(text) {
   });
 }
 
-async function speak(text, onDone) {
-  // Stop any currently playing audio
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+// Each speak() call gets a token. If a newer speak() starts (or the call is
+// stopped) while an older one is still fetching/playing, the older one aborts
+// silently: it never plays audio and never fires its onDone (which would
+// otherwise start the mic early or trigger a second voice).
+let speakToken = 0;
+let currentAudioResolve = null;
+
+function stopAllSpeech() {
+  speakToken++;
+  if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+  if (currentAudioResolve) { const r = currentAudioResolve; currentAudioResolve = null; r(); }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+async function speak(text, onDone) {
+  stopAllSpeech();
+  const myToken = speakToken;
+  const stale = function() { return myToken !== speakToken; };
 
   state.isSpeaking = true;
   setStatus('Agent speaking…', 'speaking');
 
   const finish = function() {
+    if (stale()) return;
     state.isSpeaking = false;
     setStatus('Listening…', 'listening');
     if (onDone) onDone();
@@ -217,6 +232,7 @@ async function speak(text, onDone) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text })
     });
+    if (stale()) return;
 
     const contentType = response.headers.get('Content-Type') || '';
 
@@ -230,6 +246,7 @@ async function speak(text, onDone) {
 
     // ElevenLabs returned audio — play it
     const arrayBuffer = await response.arrayBuffer();
+    if (stale()) return;
     if (!arrayBuffer || arrayBuffer.byteLength === 0) {
       console.warn('Empty audio response, using browser TTS');
       await speakFallback(text);
@@ -243,22 +260,22 @@ async function speak(text, onDone) {
     currentAudio = audio;
 
     await new Promise(function(resolve) {
-      audio.onended = function() {
-        currentAudio = null;
+      currentAudioResolve = resolve;
+      const cleanup = function() {
+        if (currentAudio === audio) currentAudio = null;
+        if (currentAudioResolve === resolve) currentAudioResolve = null;
         URL.revokeObjectURL(audioUrl);
-        resolve();
       };
+      audio.onended = function() { cleanup(); resolve(); };
       audio.onerror = function(e) {
         console.warn('Audio error:', e);
-        currentAudio = null;
-        URL.revokeObjectURL(audioUrl);
+        cleanup();
         resolve(); // resolve anyway so finish() fires
       };
       audio.play().catch(async function(playErr) {
         console.warn('Autoplay blocked:', playErr);
-        currentAudio = null;
-        URL.revokeObjectURL(audioUrl);
-        await speakFallback(text);
+        cleanup();
+        if (!stale()) await speakFallback(text);
         resolve();
       });
     });
@@ -266,6 +283,7 @@ async function speak(text, onDone) {
     finish();
 
   } catch (err) {
+    if (stale()) return;
     console.warn('speak() error, using browser TTS:', err);
     await speakFallback(text);
     finish();
@@ -468,6 +486,19 @@ function stopListening() {
 async function captureAnswer(text) {
   text = text.trim();
   if (!text) return;
+  // Re-entrancy guard: speech recognition can deliver a late final result after
+  // stop(), which re-arms the silence timer and submits the same answer twice
+  // (=> two questions generated and spoken at once).
+  if (state.processingAnswer) return;
+  state.processingAnswer = true;
+  state.finalTranscript = '';
+  try {
+    await captureAnswerInner(text);
+  } finally {
+    state.processingAnswer = false;
+  }
+}
+async function captureAnswerInner(text) {
   pushUser(text);
 
   if (state.callOver) {
@@ -493,15 +524,19 @@ function setupRecognition() {
   const rec = new SR();
   rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
   rec.onresult = function(ev) {
+    if (!state.isListening) return; // ignore late results after stop() / while agent is talking
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const t = ev.results[i][0].transcript;
       if (ev.results[i].isFinal) state.finalTranscript += t + ' ';
     }
     if (state.silenceTimer) clearTimeout(state.silenceTimer);
     state.silenceTimer = setTimeout(function() {
-      if (state.finalTranscript.trim()) {
+      state.silenceTimer = null;
+      if (state.isListening && state.finalTranscript.trim()) {
+        const answer = state.finalTranscript;
+        state.finalTranscript = '';
         stopListening();
-        captureAnswer(state.finalTranscript);
+        captureAnswer(answer);
       }
     }, 800);
   };
@@ -576,8 +611,7 @@ function startCall() {
 async function endCallEarly() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  stopAllSpeech();
   const closing = "Thanks for your time. We'll review what you've shared. If we see a clear fit for AI in your business, we'll be in touch about the £350 roadmap. No obligation either way.";
   pushAgent(closing);
   await saveTranscriptToBackend();
@@ -613,8 +647,7 @@ function exportTranscript() {
 function resetAll() {
   stopListening();
   if (state.timerInterval) clearInterval(state.timerInterval);
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  stopAllSpeech();
   state = {
     started: false, callOver: false, currentTopicIdx: 0, exchangesOnTopic: 0,
     questionsAsked: 0, topicsCovered: new Set(), transcript: [],
@@ -622,7 +655,7 @@ function resetAll() {
     isListening: false, isSpeaking: false, finalTranscript: '', silenceTimer: null,
     clientName: '', businessName: '', email: '',
     signalDetectedOnCurrentTopic: false, signalStrengthOnCurrentTopic: 'none',
-    deepProbeAvailable: true, deepProbeUsedOnTopic: false
+    deepProbeAvailable: true, deepProbeUsedOnTopic: false, processingAnswer: false
   };
   currentQEl.textContent = "When you press start, the agent will ask its first question and listen for your reply.";
   topicPill.textContent = 'Intro';
