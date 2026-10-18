@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Notice | AI Growth Catalyst</title>
+<meta name="description" content="How AI Growth Catalyst collects, uses and protects personal data, including business contact details used for outreach.">
+<meta name="robots" content="index,follow">
+<!--
+  BEFORE PUBLISHING, fill in the two [SQUARE BRACKET] items (search for "[").
+  1. 38 Victory road, Wimbledon SW19 1HN       a UK address where post can be served on you (a virtual office address works; a PO box doesn't)
+    If the ElevenLabs voice was never switched on (calls still use the browser voice), delete the ElevenLabs row.
+  Upload to the AI-discovery repo as privacy/index.html. Delete this comment when done.
+-->
+<style>
+  :root { --ink:#1a2332; --muted:#5a6472; --line:#e4dfd6; --accent:#c85a3e; --sage:#6f8a6e; --bg:#ffffff; --soft:#f7f5f1; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 Arial, Helvetica, sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 80px; }
+  a { color:var(--accent); }
+  .brand { font-family:Georgia, 'Times New Roman', serif; font-weight:bold; font-size:18px; color:var(--ink); text-decoration:none; }
+  h1 { font-family:Georgia, 'Times New Roman', serif; font-size:2rem; line-height:1.2; margin:28px 0 6px; }
+  h2 { font-family:Georgia, 'Times New Roman', serif; font-size:1.3rem; margin:36px 0 8px; padding-top:16px; border-top:1px solid var(--line); }
+  h3 { font-size:1rem; margin:20px 0 4px; }
+  p, li { max-width:68ch; }
+  .meta { color:var(--muted); font-size:.92rem; }
+  .summary { background:var(--soft); border-left:3px solid var(--accent); padding:14px 18px; margin:20px 0; }
+  .summary p { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:.95rem; }
+  th, td { text-align:left; vertical-align:top; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; }
+  .tw { overflow-x:auto; }
+  footer { margin-top:48px; color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="brand" href="/">AI Growth Catalyst</a>
+
+  <h1>Privacy notice</h1>
+  <p class="meta">Last updated: 19 October 2026</p>
+
+  <div class="summary">
+    <p><strong>In short:</strong> I help UK businesses use practical AI. To find businesses that might benefit, I collect publicly available business contact details and information about how a business operates. I use it only to contact that business about my services. You can opt out at any time by replying "no thanks" to any email, or by emailing <a href="mailto:hello@aigrowthcatalyst.org">hello@aigrowthcatalyst.org</a>.</p>
+  </div>
+
+  <h2>Who I am</h2>
+  <p>AI Growth Catalyst is run by Chris Jacobs. The data controller is Chris Jacobs, a sole trader trading as AI Growth Catalyst, [POSTAL ADDRESS]. For anything about your data, email <a href="mailto:hello@aigrowthcatalyst.org">hello@aigrowthcatalyst.org</a>.</p>
+  <p>I am registered with the Information Commissioner's Office (ICO), registration number [ICO REG NUMBER].</p>
+
+  <h2>If I emailed your business</h2>
+  <p>You are most likely reading this because I sent your business an email. Here is exactly what I hold and where it came from.</p>
+
+  <h3>What I collect</h3>
+  <ul>
+    <li>Company name, registration number, registered address and directors' names, from <strong>Companies House</strong>.</li>
+    <li>Trading name, address, phone number, website, Google rating and review count, and themes from public reviews, from <strong>Google Maps / Google Business Profile</strong>.</li>
+    <li>Business email addresses and information about the website (for example, whether it offers online booking or live chat), from <strong>your business's own website</strong>.</li>
+    <li>Whether the business is advertising admin or reception roles, from <strong>public job adverts</strong> (via Adzuna).</li>
+    <li>A short assessment of where AI might save the business time, and a draft email. These are written with help from an AI tool, based only on the information above.</li>
+  </ul>
+  <p>I do not collect home addresses, personal phone numbers, social media profiles of individuals, or any special category data. I aim to use general business inboxes (such as info@) rather than personal ones, and I do not record the names of employees or reviewers.</p>
+
+  <h3>Why, and on what basis</h3>
+  <p>I use this information to contact businesses about services that may help them. My lawful basis is <strong>legitimate interests</strong> (UK GDPR Article 6(1)(f)): it is reasonable for a business consultancy to contact relevant businesses, using business contact details that are already public, about a service related to how they work. I have weighed this against your interests, and I keep the impact low by:</p>
+  <ul>
+    <li>contacting limited companies and LLPs only, in line with the Privacy and Electronic Communications Regulations (PECR);</li>
+    <li>sending a small number of relevant, plain emails, with a maximum of three follow-ups;</li>
+    <li>including a simple way to opt out in every email, and honouring it permanently.</li>
+  </ul>
+  <p>I do not sell, rent or share your details with anyone for their own marketing.</p>
+
+  <h3>How long I keep it</h3>
+  <p>If there is no reply, I delete prospect details 12 months after collecting them. If you opt out, I keep only your email address and company name on a "do not contact" list, so that I never contact you again.</p>
+
+  <h2>If you book or take a discovery call</h2>
+  <p>When you use the AI discovery call at <a href="/call/">aigrowthcatalyst.org/call</a>, I collect:</p>
+  <ul>
+    <li>your name, business name and email address, which you enter before the call;</li>
+    <li>a <strong>text transcript</strong> of your answers, the call length and the topics covered;</li>
+    <li>internal notes about your business that an AI tool writes from the transcript, to help me prepare a follow-up and a quote.</li>
+  </ul>
+  <p><strong>No audio is recorded or stored by me.</strong> Your speech is turned into text by your own web browser's built-in speech recognition. Some browsers, including Google Chrome, do this by sending the audio to the browser maker's servers (for Chrome, Google). That processing is covered by your browser's own privacy terms. If you would rather avoid it, email me and we can arrange a normal call instead.</p>
+  <p>After the call, I email you an acknowledgement, and I may follow up about a quote for a roadmap.</p>
+  <p>My lawful basis is <strong>steps at your request before entering a contract</strong> (Article 6(1)(b)), and legitimate interests for keeping notes of our conversations. I keep call transcripts and notes for up to 24 months after our last contact, unless we go on to work together, in which case I keep them for as long as needed for that work and for my business records (normally 6 years for anything needed for tax).</p>
+  <p>Please don't share sensitive personal information (for example about health) or other people's personal details during the call. The call is about how your business runs.</p>
+
+  <h2>If you are a client</h2>
+  <p>When we work together, I process the contact details of the people I work with, and any data you share for the work. This is covered by our contract, and where I handle your customers' or staff's data on your behalf, we will agree data processing terms in writing first.</p>
+
+  <h2>If my tool visited your website</h2>
+  <p>My research tool identifies itself as <code>AIGrowthCatalystLeadBot</code> and links to this page. It reads only public pages, respects <code>robots.txt</code>, and fetches a handful of pages per site (usually the home page and a contact page). To block it, add this to your <code>robots.txt</code>:</p>
+  <p><code>User-agent: AIGrowthCatalystLeadBot<br>Disallow: /</code></p>
+
+  <h2>Who helps me process data</h2>
+  <p>I use these service providers. Each acts on my instructions and is bound by data protection terms.</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>Provider</th><th>What for</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Zoho</td><td>Business email</td><td>EU</td></tr>
+      <tr><td>Google</td><td>Storing prospect lists and call transcripts (Google Sheets), receiving call notes (Gmail), and business location data (Google Maps)</td><td>UK / EU / USA</td></tr>
+      <tr><td>Anthropic</td><td>The AI that runs the discovery call questions, writes call notes, and assesses prospects</td><td>USA</td></tr>
+      <tr><td>Render</td><td>Hosting the server behind the discovery call</td><td>USA / EU</td></tr>
+      <tr><td>Resend</td><td>Sending call acknowledgements and notes by email</td><td>USA</td></tr>
+      <tr><td>ElevenLabs</td><td>Generating the call agent's voice, if used (only the agent's words are sent, never yours)</td><td>USA</td></tr>
+      <tr><td>GitHub (Microsoft)</td><td>Website hosting and running the research tool</td><td>USA</td></tr>
+      <tr><td>Adzuna</td><td>Searching public job adverts (no personal data is sent to them)</td><td>UK</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Where data is transferred outside the UK, it is protected by the UK's adequacy regulations (including the UK–US Data Bridge) or by the ICO's International Data Transfer Agreement or Addendum.</p>
+
+  <h2>Your rights</h2>
+  <p>You have the right to:</p>
+  <ul>
+    <li><strong>object to direct marketing</strong> at any time. This is absolute: if you object, I stop.</li>
+    <li>ask for a copy of the data I hold about you;</li>
+    <li>ask me to correct or delete it;</li>
+    <li>object to, or ask me to restrict, how I use it;</li>
+    <li>ask for a copy in a portable format, where that applies.</li>
+  </ul>
+  <p>Email <a href="mailto:hello@aigrowthcatalyst.org">hello@aigrowthcatalyst.org</a> and I will respond within one month. There is no charge.</p>
+  <p>If you are unhappy with how I've handled your data, please tell me first. You also have the right to complain to the ICO: <a href="https://ico.org.uk/make-a-complaint/">ico.org.uk/make-a-complaint</a> or 0303 123 1113.</p>
+
+  <h2>Website</h2>
+  <p>This website does not use advertising or tracking cookies. If that changes, I will update this notice and ask for your consent first.</p>
+
+  <h2>Changes</h2>
+  <p>I will update this page if anything changes, and the date at the top shows the latest version.</p>
+
+  <footer>AI Growth Catalyst · Practical AI for SMEs · <a href="/">aigrowthcatalyst.org</a></footer>
+</div>
+</body>
+</html>
